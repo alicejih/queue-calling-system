@@ -231,10 +231,13 @@
       <div class="qr-image-wrap" style="margin: 16px 0; display: flex; justify-content: center;">
         <img id="qrImage" src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=https://alicejih.github.io/queue-calling-system/" alt="顧客查號 QR Code" style="border-radius: 12px; border: 2px solid #e2e8f0; width: 200px; height: 200px;">
       </div>
-      <p class="modal-meta" style="word-break: break-all; font-size: 0.8rem; color: #64748b; margin-bottom: 16px;">
-        網址：https://alicejih.github.io/queue-calling-system/
+      <p class="modal-meta" style="word-break: break-all; font-size: 0.82rem; color: #475569; margin-bottom: 14px; background: #f8fafc; padding: 8px 12px; border-radius: 8px; border: 1px solid #e2e8f0;">
+        顧客專屬網址：<br><strong id="qrCustomerUrlText" style="color: #2563eb;">https://alicejih.github.io/queue-calling-system/</strong>
       </p>
-      <button id="closeQrModalBtn" class="modal-btn">關閉視窗</button>
+      <div style="display: flex; gap: 8px;">
+        <button id="copyCustomerUrlBtn" class="modal-btn" style="flex: 2; background: #2563eb;">📋 複製顧客查號連結</button>
+        <button id="closeQrModalBtn" class="modal-btn" style="flex: 1; background: #64748b;">關閉</button>
+      </div>
     </div>
   </div>
 
@@ -268,7 +271,8 @@
     </div>
   </div>
 
-  <script src="shared.js"></script>
-  <script src="admin.js"></script>
+  <script src="config.js?v=2.3"></script>
+  <script src="shared.js?v=2.3"></script>
+  <script src="admin.js?v=2.3"></script>
 </body>
 </html>

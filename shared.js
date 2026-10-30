@@ -59,8 +59,20 @@ function calculateWaitDurationText(timestamp) {
   return `等候 ${hours} 時 ${mins % 60} 分`;
 }
 
-// 讀取 Google 試算表網址
+// 讀取 Google 試算表網址 (優先度：1. 網址參數 ?api= ➔ 2. 全域 config.js ➔ 3. 本地儲存)
 function getSheetApiUrl() {
+  try {
+    const urlParam = new URLSearchParams(window.location.search).get('api');
+    if (urlParam) {
+      localStorage.setItem(SHEET_API_STORAGE_KEY, urlParam.trim());
+      return urlParam.trim();
+    }
+  } catch (e) {}
+
+  if (typeof QUEUE_CONFIG !== 'undefined' && QUEUE_CONFIG.scriptApiUrl) {
+    return QUEUE_CONFIG.scriptApiUrl.trim();
+  }
+
   return localStorage.getItem(SHEET_API_STORAGE_KEY) || appState.settings.sheetApiUrl || '';
 }
 
@@ -71,7 +83,6 @@ function setSheetApiUrl(url) {
   appState.settings.sheetApiUrl = cleanUrl;
   saveState('SETTINGS_UPDATED');
   updateSheetSyncStatus();
-  // 立即從試算表抓取一次最新資料
   fetchLatestFromSheet();
 }
 
@@ -203,58 +214,149 @@ function postToGoogleSheet(action, extraData = {}) {
   }
 }
 
-// 定時從 Google 試算表抓取最新資料 (支援顧客手機自動跨裝置同步)
+// 定時從 Google 試算表抓取最新資料 (支援 Apps Script Web App 與 公開 GViz JSONP 雙軌抓取)
 function fetchLatestFromSheet() {
+  if (isFetchingFromSheet) return;
+
   const apiUrl = getSheetApiUrl();
-  if (!apiUrl || isFetchingFromSheet) return;
+  if (apiUrl) {
+    // 軌道 1: 透過 Google Apps Script 讀取
+    isFetchingFromSheet = true;
+    fetch(apiUrl)
+      .then(res => res.json())
+      .then(data => {
+        isFetchingFromSheet = false;
+        if (data && data.status === 'success') {
+          applySheetData(data);
+        }
+      })
+      .catch(err => {
+        isFetchingFromSheet = false;
+        console.warn('Apps Script fetch failed, falling back to GViz JSONP', err);
+        fetchFromPublicSpreadsheetGviz();
+      });
+  } else {
+    // 軌道 2: 直接透過 Google Visualization API (JSONP，免 API 金鑰、免 CORS 限制) 讀取公開試算表！
+    fetchFromPublicSpreadsheetGviz();
+  }
+}
+
+// 直接透過 Google Visualization API (JSONP 無 CORS 限制) 讀取公開 Google 試算表之「工作區」
+function fetchFromPublicSpreadsheetGviz() {
+  if (isFetchingFromSheet) return;
+  const sheetId = (typeof QUEUE_CONFIG !== 'undefined' && QUEUE_CONFIG.spreadsheetId) || '1ysyfQCF1XrjR5Ps2tfQexaeUi5gdNdy0Xrl6GwD7KJs';
+  if (!sheetId) return;
 
   isFetchingFromSheet = true;
-  fetch(apiUrl)
-    .then(res => res.json())
-    .then(data => {
-      isFetchingFromSheet = false;
-      if (data && data.status === 'success') {
-        let changed = false;
+  const callbackName = '__gvizQueueCallback';
 
-        if (data.currentNumber !== undefined && data.currentNumber !== appState.currentNumber) {
-          appState.currentNumber = data.currentNumber;
-          changed = true;
-        }
-        if (data.lastIssuedNumber !== undefined && data.lastIssuedNumber > appState.lastIssuedNumber) {
-          appState.lastIssuedNumber = data.lastIssuedNumber;
-          changed = true;
-        }
-        if (data.counter && data.counter !== appState.settings.counter) {
-          appState.settings.counter = data.counter;
-          changed = true;
-        }
-        if (Array.isArray(data.waitingList)) {
-          // 比對清單是否有變化
-          if (JSON.stringify(data.waitingList) !== JSON.stringify(appState.waitingList)) {
-            appState.waitingList = data.waitingList;
-            changed = true;
-          }
-        }
+  // 設定全域回呼
+  window[callbackName] = function(json) {
+    isFetchingFromSheet = false;
+    try {
+      parseAndApplyGvizData(json);
+    } catch (e) {
+      console.warn('Error parsing GViz data:', e);
+    } finally {
+      const el = document.getElementById('gviz-jsonp-script');
+      if (el) el.remove();
+    }
+  };
 
-        if (changed) {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
-          if (onGlobalSyncCallback) {
-            onGlobalSyncCallback({
-              type: 'SHEET_SYNC_UPDATE',
-              state: appState,
-              number: appState.currentNumber,
-              counter: appState.settings.counter
-            });
-          }
-        }
-        updateSheetSyncStatus(true);
+  const existing = document.getElementById('gviz-jsonp-script');
+  if (existing) existing.remove();
+
+  const script = document.createElement('script');
+  script.id = 'gviz-jsonp-script';
+  script.src = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=responseHandler:${callbackName}&sheet=%E5%B7%A5%E4%BD%9C%E5%8D%80&_t=${Date.now()}`;
+  script.onerror = function() {
+    isFetchingFromSheet = false;
+    const el = document.getElementById('gviz-jsonp-script');
+    if (el) el.remove();
+  };
+  document.body.appendChild(script);
+}
+
+// 解析 Google Visualization API 回傳之 table 結構
+function parseAndApplyGvizData(json) {
+  if (!json || !json.table || !Array.isArray(json.table.rows)) return;
+  const rows = json.table.rows;
+  if (rows.length === 0) return;
+
+  // 第 1 列 (對應試算表之第 2 列 A2:I2)
+  const row0 = rows[0]?.c || [];
+  const curNumRaw = row0[0]?.v;
+  const curNumber = (curNumRaw !== undefined && curNumRaw !== null && curNumRaw !== '') ? parseInt(curNumRaw, 10) : null;
+  const counter = row0[1]?.v ? String(row0[1].v) : '1 號櫃檯';
+  const lastIssuedRaw = row0[2]?.v;
+  const lastIssued = (lastIssuedRaw !== undefined && lastIssuedRaw !== null) ? parseInt(lastIssuedRaw, 10) : 0;
+
+  // 等候名單 (E:I 欄位)
+  const waitingList = [];
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i]?.c;
+    if (r && r.length >= 5) {
+      const numRaw = r[4]?.v;
+      if (numRaw !== undefined && numRaw !== null && numRaw !== '' && !isNaN(numRaw)) {
+        const time = r[5]?.f || r[5]?.v || '';
+        const status = r[6]?.v ? String(r[6].v) : '等候中';
+        const ticketId = r[7]?.v ? String(r[7].v) : ('T-' + numRaw);
+        const ts = r[8]?.v ? Number(r[8].v) : Date.now();
+
+        waitingList.push({
+          number: parseInt(numRaw, 10),
+          time: String(time),
+          status: status,
+          id: String(ticketId),
+          timestamp: ts || Date.now()
+        });
       }
-    })
-    .catch(err => {
-      isFetchingFromSheet = false;
-      console.warn('Fetch from Google Sheet failed', err);
-      updateSheetSyncStatus(false);
-    });
+    }
+  }
+
+  applySheetData({
+    currentNumber: curNumber,
+    lastIssuedNumber: lastIssued,
+    counter: counter,
+    waitingList: waitingList
+  });
+}
+
+// 套用試算表回傳之資料
+function applySheetData(data) {
+  let changed = false;
+
+  if (data.currentNumber !== undefined && data.currentNumber !== appState.currentNumber) {
+    appState.currentNumber = data.currentNumber;
+    changed = true;
+  }
+  if (data.lastIssuedNumber !== undefined && data.lastIssuedNumber > appState.lastIssuedNumber) {
+    appState.lastIssuedNumber = data.lastIssuedNumber;
+    changed = true;
+  }
+  if (data.counter && data.counter !== appState.settings.counter) {
+    appState.settings.counter = data.counter;
+    changed = true;
+  }
+  if (Array.isArray(data.waitingList)) {
+    if (JSON.stringify(data.waitingList) !== JSON.stringify(appState.waitingList)) {
+      appState.waitingList = data.waitingList;
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
+    if (onGlobalSyncCallback) {
+      onGlobalSyncCallback({
+        type: 'SHEET_SYNC_UPDATE',
+        state: appState,
+        number: appState.currentNumber,
+        counter: appState.settings.counter
+      });
+    }
+  }
+  updateSheetSyncStatus(true);
 }
 
 // 設定全域事件監聽
@@ -291,7 +393,7 @@ function listenToSyncEvents(callback) {
     }
   });
 
-  // 3. 備援輪詢（本地 storage 與 Google 試算表定時抓取）
+  // 3. 每 2.5 秒自動向 Google 試算表與本地 storage 抓取最新狀態
   setInterval(() => {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw && raw !== lastKnownStateString) {
@@ -301,11 +403,9 @@ function listenToSyncEvents(callback) {
       }
     }
 
-    // 若有設定 Google 試算表，每 3 秒自動與試算表雙向同步
-    if (getSheetApiUrl()) {
-      fetchLatestFromSheet();
-    }
-  }, 3000);
+    // 每 2.5 秒自動同步 Google 試算表最新進度
+    fetchLatestFromSheet();
+  }, 2500);
 
   updateSheetSyncStatus();
 }

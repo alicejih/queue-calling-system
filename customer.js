@@ -15,7 +15,7 @@ const customerElements = {
   myStatusTitle: document.getElementById('myStatusTitle'),
   myStatusDesc: document.getElementById('myStatusDesc'),
   myProgressBarFill: document.getElementById('myProgressBarFill'),
-  cancelMyTicketBtn: document.getElementById('cancelMyTicketBtn'),
+  resetMyTicketBtn: document.getElementById('resetMyTicketBtn'),
 
   // 手機取號與手動追蹤
   getTicketBtn: document.getElementById('getTicketBtn'),
@@ -135,6 +135,17 @@ function handleIncomingCallEvent(calledNum, counter) {
 // 顧客在手機上點「立即線上領取號碼牌」
 function handleCustomerTakeTicket() {
   loadState(); // 確保讀取最新發號流水號與等候名單
+
+  // 嚴格一機一號鎖定：若這隻手機已持有有效號碼牌，禁止再次取號
+  if (myTrackedNumber) {
+    alert(`您目前已持有排隊號碼牌【${formatNumber(myTrackedNumber)} 號】！\n為維護現場公平秩序，每位顧客每部手機僅能領取一張有效號碼牌。\n若需重新領號，請待本次服務完成。`);
+    return;
+  }
+
+  if (customerElements.getTicketBtn) {
+    customerElements.getTicketBtn.disabled = true;
+  }
+
   getAudioContext();
 
   appState.lastIssuedNumber += 1;
@@ -153,7 +164,7 @@ function handleCustomerTakeTicket() {
   logActivity('顧客手機線上取號', currentNum, '', waitPeople > 0 ? `前方等候 ${waitPeople} 人` : '無人等候');
   saveState('TICKET_TAKEN', { ticket });
 
-  // 記錄這隻手機的專屬號碼
+  // 鎖定這隻手機的專屬號碼
   setMyTrackedNumber(currentNum);
 
   // 顯示彈窗提示
@@ -165,10 +176,21 @@ function handleCustomerTakeTicket() {
   customerElements.ticketModal.classList.remove('hidden');
   playSuccessChime();
   renderCustomerUI();
+
+  setTimeout(() => {
+    if (customerElements.getTicketBtn) {
+      customerElements.getTicketBtn.disabled = false;
+    }
+  }, 1000);
 }
 
 // 手動輸入已拿到的紙本號碼牌
 function handleTrackManualTicket() {
+  if (myTrackedNumber) {
+    alert(`您目前已持有追蹤號碼牌【${formatNumber(myTrackedNumber)} 號】！\n若需追蹤其他號碼，請先確認是否已完成服務。`);
+    return;
+  }
+
   const val = parseInt(customerElements.manualTicketInput.value, 10);
   if (!val || val <= 0) {
     alert('請輸入正確的排隊號碼（例如：5）');
@@ -185,12 +207,20 @@ function setMyTrackedNumber(num) {
   localStorage.setItem(MY_TICKET_STORAGE_KEY, String(num));
 }
 
-// 取消/更換號碼
-function handleCancelMyTicket() {
-  if (confirm('確定要更換或取消追蹤目前的號碼牌嗎？')) {
-    myTrackedNumber = null;
-    localStorage.removeItem(MY_TICKET_STORAGE_KEY);
-    renderCustomerUI();
+// 結束本次排隊 (僅在完成服務或確認過號後可用)
+function handleResetMyTicket() {
+  const isCompleted = appState.completedList && appState.completedList.some(t => t.number === myTrackedNumber);
+  const cur = appState.currentNumber;
+  const isPassed = (cur !== null && cur > myTrackedNumber && !appState.waitingList.some(t => t.number === myTrackedNumber));
+
+  if (isCompleted || isPassed) {
+    if (confirm('確定要結束本次號碼牌並重新取號嗎？')) {
+      myTrackedNumber = null;
+      localStorage.removeItem(MY_TICKET_STORAGE_KEY);
+      renderCustomerUI();
+    }
+  } else {
+    alert('您的號碼牌仍在排隊隊列中，服務完成後將自動開放重新取號！');
   }
 }
 
@@ -246,7 +276,7 @@ function renderMyTicketCard() {
   const cur = appState.currentNumber;
   const isServingMe = (cur !== null && cur === myTrackedNumber);
   const myIndexInWait = appState.waitingList.findIndex(t => t.number === myTrackedNumber);
-  const isCompleted = appState.completedList.some(t => t.number === myTrackedNumber);
+  const isCompleted = appState.completedList && appState.completedList.some(t => t.number === myTrackedNumber);
 
   customerElements.myTicketStatusBox.className = 'my-status-box';
 
@@ -257,6 +287,7 @@ function renderMyTicketCard() {
     customerElements.myStatusTitle.textContent = '輪到您了！請前往辦理';
     customerElements.myStatusDesc.textContent = `請攜帶您的號碼牌，立即前往【${appState.settings.counter || '1 號櫃檯'}】辦理！`;
     customerElements.myProgressBarFill.style.width = '100%';
+    if (customerElements.resetMyTicketBtn) customerElements.resetMyTicketBtn.classList.add('hidden');
   } else if (myIndexInWait !== -1) {
     // 還在等候隊列中
     customerElements.myTicketStatusBox.classList.add('waiting-status');
@@ -272,6 +303,7 @@ function renderMyTicketCard() {
       customerElements.myStatusDesc.textContent = `預估等候時間約 ${estMin} 分鐘，您可以先至附近休息。`;
       customerElements.myProgressBarFill.style.width = `${Math.max(15, 100 - (ahead * 15))}%`;
     }
+    if (customerElements.resetMyTicketBtn) customerElements.resetMyTicketBtn.classList.add('hidden');
   } else if (isCompleted) {
     // 已經服務完成
     customerElements.myTicketStatusBox.classList.add('done-status');
@@ -279,6 +311,10 @@ function renderMyTicketCard() {
     customerElements.myStatusTitle.textContent = '服務已完成';
     customerElements.myStatusDesc.textContent = '感謝您的光臨，您的業務已於今日順利辦理完成！';
     customerElements.myProgressBarFill.style.width = '100%';
+    if (customerElements.resetMyTicketBtn) {
+      customerElements.resetMyTicketBtn.classList.remove('hidden');
+      customerElements.resetMyTicketBtn.textContent = '✅ 服務已完成，結束本次排隊 / 取新號碼';
+    }
   } else if (cur !== null && cur > myTrackedNumber) {
     // 可能已過號
     customerElements.myTicketStatusBox.classList.add('passed-status');
@@ -286,13 +322,18 @@ function renderMyTicketCard() {
     customerElements.myStatusTitle.textContent = '號碼可能已過號';
     customerElements.myStatusDesc.textContent = `現場目前叫至 ${formatNumber(cur)} 號，若您已在現場，請向櫃檯人員洽詢辦理。`;
     customerElements.myProgressBarFill.style.width = '100%';
+    if (customerElements.resetMyTicketBtn) {
+      customerElements.resetMyTicketBtn.classList.remove('hidden');
+      customerElements.resetMyTicketBtn.textContent = '⚠️ 此號已過號，結束並重新取號';
+    }
   } else {
-    // 等候開始
+    // 剛登錄
     customerElements.myTicketStatusBox.classList.add('waiting-status');
     customerElements.myStatusIcon.textContent = '⏳';
     customerElements.myStatusTitle.textContent = '號碼牌已登錄';
     customerElements.myStatusDesc.textContent = '系統隨時為您追蹤現場最新叫號進度！';
     customerElements.myProgressBarFill.style.width = '20%';
+    if (customerElements.resetMyTicketBtn) customerElements.resetMyTicketBtn.classList.add('hidden');
   }
 }
 
@@ -353,8 +394,10 @@ function setupCustomerEventListeners() {
     if (e.key === 'Enter') handleTrackManualTicket();
   });
 
-  // 取消/更換號碼
-  customerElements.cancelMyTicketBtn.addEventListener('click', handleCancelMyTicket);
+  // 結束本次排隊 / 取新號碼 (僅在完成服務或確認過號後生效)
+  if (customerElements.resetMyTicketBtn) {
+    customerElements.resetMyTicketBtn.addEventListener('click', handleResetMyTicket);
+  }
 
   // 關閉小票彈窗
   customerElements.modalCloseBtn.addEventListener('click', () => {

@@ -560,10 +560,46 @@ function setupAdminEventListeners() {
   const showQrBtn = document.getElementById('showQrCodeBtn');
   const qrModal = document.getElementById('qrModal');
   const closeQrBtn = document.getElementById('closeQrModalBtn');
+  const copyUrlBtn = document.getElementById('copyCustomerUrlBtn');
+  const qrImage = document.getElementById('qrImage');
+  const qrText = document.getElementById('qrCustomerUrlText');
+
+  function getCustomerPortalUrl() {
+    let baseUrl = window.location.origin + window.location.pathname.replace(/admin\.html.*$/, 'index.html');
+    if (!baseUrl.startsWith('http')) {
+      baseUrl = 'https://alicejih.github.io/queue-calling-system/';
+    }
+    const apiUrl = getSheetApiUrl();
+    if (apiUrl) {
+      return `${baseUrl}?api=${encodeURIComponent(apiUrl)}`;
+    }
+    return baseUrl;
+  }
 
   if (showQrBtn && qrModal) {
     showQrBtn.addEventListener('click', () => {
+      const url = getCustomerPortalUrl();
+      if (qrImage) {
+        qrImage.src = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(url)}`;
+      }
+      if (qrText) {
+        qrText.textContent = url;
+      }
       qrModal.classList.remove('hidden');
+    });
+  }
+  if (copyUrlBtn) {
+    copyUrlBtn.addEventListener('click', () => {
+      const url = getCustomerPortalUrl();
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(() => {
+          alert('📋 顧客查號專用網址已複製！您可以發送至 LINE 或公告。');
+        }).catch(() => {
+          prompt('請複製以下顧客查號連結：', url);
+        });
+      } else {
+        prompt('請複製以下顧客查號連結：', url);
+      }
     });
   }
   if (closeQrBtn && qrModal) {

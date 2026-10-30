@@ -59,11 +59,11 @@
           </div>
         </div>
 
-        <!-- 已領取/已追蹤號碼時顯示 -->
+        <!-- 已領取/已追蹤號碼時顯示 (嚴格一機一號防刷) -->
         <div id="hasTicketBox" class="my-ticket-card hidden">
           <div class="my-ticket-header">
             <span class="my-ticket-label">您的排隊號碼牌</span>
-            <button id="cancelMyTicketBtn" class="link-cancel-btn" title="取消或更換號碼">更換號碼</button>
+            <span class="locked-badge" style="font-size: 0.75rem; color: #94a3b8; background: rgba(255,255,255,0.08); padding: 3px 8px; border-radius: 6px;">🔒 一機一號鎖定中</span>
           </div>
 
           <div class="my-ticket-number-wrap">
@@ -84,6 +84,11 @@
               <div class="progress-bar-fill" id="myProgressBarFill" style="width: 30%;"></div>
             </div>
           </div>
+
+          <!-- 僅在服務完成後允許結束本次排隊 -->
+          <button id="resetMyTicketBtn" class="pill-btn mini-btn hidden" style="width: 100%; justify-content: center; margin-top: 6px; background: rgba(16, 185, 129, 0.2); border-color: #10b981; color: #34d399; font-weight: 700;">
+            ✅ 服務已完成，結束本次排隊
+          </button>
         </div>
       </section>
 
@@ -162,7 +167,8 @@
     </div>
   </div>
 
-  <script src="shared.js?v=2.1"></script>
-  <script src="customer.js?v=2.1"></script>
+  <script src="config.js?v=2.3"></script>
+  <script src="shared.js?v=2.3"></script>
+  <script src="customer.js?v=2.3"></script>
 </body>
 </html>
