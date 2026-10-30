@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>現場叫號看板</title>
-  <link rel="stylesheet" href="style.css?v=2.8">
+  <link rel="stylesheet" href="style.css?v=3.0">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
@@ -64,6 +64,26 @@
         </div>
       </section>
 
+      <!-- 📢 可直接到櫃檯領取（已叫號但尚未更改為好了的號碼） -->
+      <section class="card pickup-ready-card">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 1.25rem;">🛎️</span>
+            <div>
+              <h3 style="font-size: 1.05rem; font-weight: 700; color: #34d399; margin: 0;">可至櫃檯領取（已叫號）</h3>
+              <p style="font-size: 0.75rem; color: #94a3b8; margin: 2px 0 0 0;">下列號碼已叫號，可直接前往櫃檯領取</p>
+            </div>
+          </div>
+          <span id="pickupCountBadge" style="font-size: 0.8rem; font-weight: 700; color: #34d399; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(52, 211, 153, 0.3); padding: 3px 10px; border-radius: 20px;">
+            0 個
+          </span>
+        </div>
+
+        <div id="pickupNumbersGrid" class="pickup-numbers-grid">
+          <div class="pickup-empty-hint">目前無待領取的已叫號號碼</div>
+        </div>
+      </section>
+
       <!-- 顧客輸入自己的號碼牌，即時計算前面還差幾個人 -->
       <section class="card my-check-card" style="margin-top: 14px; padding: 18px; border-radius: 16px; background: rgba(30, 41, 59, 0.75); backdrop-filter: blur(10px); border: 1.5px solid rgba(255, 255, 255, 0.1);">
         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
@@ -95,8 +115,8 @@
     </main>
   </div>
 
-  <script src="config.js?v=2.9"></script>
-  <script src="shared.js?v=2.9"></script>
-  <script src="customer.js?v=2.9"></script>
+  <script src="config.js?v=3.0"></script>
+  <script src="shared.js?v=3.0"></script>
+  <script src="customer.js?v=3.0"></script>
 </body>
 </html>

@@ -111,6 +111,16 @@ function adminCall(number) {
   appState.currentNumber = number;
   const currentCounter = appState.settings.counter || '1 號櫃檯';
 
+  // 標記隊列中的此號碼為已叫號
+  if (Array.isArray(appState.waitingList)) {
+    const t = appState.waitingList.find(x => x.number === number);
+    if (t) {
+      t.called = true;
+      t.status = '🔔 已叫號(可取件)';
+      t.calledTime = getTimeString();
+    }
+  }
+
   logActivity('叫號呼叫', number, currentCounter, '櫃檯廣播叫號');
 
   saveState('CALL_NUMBER', {
@@ -137,7 +147,9 @@ function adminIssueTicket() {
     id: 'T-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
     number: currentNum,
     time: getTimeString(now),
-    timestamp: now.getTime()
+    timestamp: now.getTime(),
+    status: '⏳ 等候中',
+    called: false
   };
 
   if (!Array.isArray(appState.waitingList)) {
@@ -304,14 +316,15 @@ function renderAdminWaitingGrid() {
 
     waitingList.forEach((ticket, idx) => {
       const isCurrent = (ticket.number === appState.currentNumber);
+      const isCalled = ticket.called || isCurrent;
       const card = document.createElement('div');
       card.className = `ticket-item-card ${isCurrent ? 'is-current' : ''}`;
       card.style.cursor = 'pointer';
       card.title = '點擊可直接叫此號';
 
       card.innerHTML = `
-        <span class="ticket-badge-current">
-          ${isCurrent ? '🔔 目前叫號中' : `等候順位 第 ${idx + 1} 位`}
+        <span class="ticket-badge-current" style="${!isCurrent && isCalled ? 'background: #059669; color: #fff;' : ''}">
+          ${isCurrent ? '🔔 目前叫號中' : (isCalled ? '🛎️ 已叫號(待取件)' : `等候順位 第 ${idx + 1} 位`)}
         </span>
         <div class="card-num-row">
           <span class="item-num">${formatNumber(ticket.number)}</span>

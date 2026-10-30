@@ -240,10 +240,7 @@ function updateTicketStatusInWorkspace(ws, number, newStatus) {
   for (var i = 0; i < data.length; i++) {
     if (data[i][0] == number) {
       ws.getRange(2 + i, 7).setValue(newStatus);
-    } else {
-      if (ws.getRange(2 + i, 7).getValue() === "🔔 叫號中") {
-        ws.getRange(2 + i, 7).setValue("⏳ 等候中");
-      }
+      break;
     }
   }
 }

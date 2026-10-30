@@ -115,6 +115,33 @@ function loadState() {
   return appState;
 }
 
+// 取得「已經叫號但還未更改狀態為好了」的所有號碼（可直接到櫃檯領取）
+function getCalledPendingPickupNumbers() {
+  const result = [];
+  const waitingList = Array.isArray(appState.waitingList) ? appState.waitingList : [];
+
+  waitingList.forEach(t => {
+    const isCur = (appState.currentNumber !== null && t.number === appState.currentNumber);
+    const isMarkedCalled = (t.called === true || (t.status && (t.status.includes('叫號') || t.status.includes('可取') || t.status.includes('可領'))));
+    if (isCur || isMarkedCalled) {
+      if (!result.includes(t.number)) {
+        result.push(t.number);
+      }
+    }
+  });
+
+  // 若當前叫號存在且不在 completedList 中，確保也納入清單
+  if (appState.currentNumber !== null && !result.includes(appState.currentNumber)) {
+    const isCompleted = Array.isArray(appState.completedList) && appState.completedList.some(c => c.number === appState.currentNumber);
+    if (!isCompleted) {
+      result.push(appState.currentNumber);
+    }
+  }
+
+  result.sort((a, b) => a - b);
+  return result;
+}
+
 // 套用外部傳入的新狀態
 function applyIncomingState(incomingState, eventType = 'STATE_SYNC', extraData = {}) {
   if (!incomingState) return;
@@ -312,10 +339,14 @@ function parseAndApplyGvizData(json) {
         const ticketId = r[7]?.v ? String(r[7].v) : ('T-' + numRaw);
         const ts = r[8]?.v ? Number(r[8].v) : Date.now();
 
+        const num = parseInt(numRaw, 10);
+        const isCalled = status.includes('叫號') || status.includes('可取') || status.includes('可領') || status === 'CALLED' || (curNumber !== null && num === curNumber);
+
         waitingList.push({
-          number: parseInt(numRaw, 10),
+          number: num,
           time: String(time),
           status: status,
+          called: isCalled,
           id: String(ticketId),
           timestamp: ts || Date.now()
         });

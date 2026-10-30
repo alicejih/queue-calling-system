@@ -19,7 +19,11 @@ const customerElements = {
   myResultBox: document.getElementById('myResultBox'),
   myResultMainText: document.getElementById('myResultMainText'),
   myResultSubText: document.getElementById('myResultSubText'),
-  myResultVibrateHint: document.getElementById('myResultVibrateHint')
+  myResultVibrateHint: document.getElementById('myResultVibrateHint'),
+
+  // 可直接到櫃檯領取清單
+  pickupNumbersGrid: document.getElementById('pickupNumbersGrid'),
+  pickupCountBadge: document.getElementById('pickupCountBadge')
 };
 
 const CUSTOMER_SAVED_NUMBER_KEY = 'CUSTOMER_TRACKED_NUMBER_V1';
@@ -91,9 +95,11 @@ function checkAndTriggerVibration(calledNum) {
   const myNum = parseInt(myNumStr, 10);
   if (myNum <= 0) return;
 
-  // 到號時震動 (差 0 人)：現場叫到自己號碼時震動
-  if (calledNum === myNum) {
-    const key = `TURN_${calledNum}`;
+  const pickupNumbers = getCalledPendingPickupNumbers();
+
+  // 到號時震動 (差 0 人)：現場叫到自己號碼或在可取件名單時震動
+  if (calledNum === myNum || pickupNumbers.includes(myNum)) {
+    const key = `PICKUP_${myNum}`;
     if (lastVibratedKey !== key) {
       lastVibratedKey = key;
       doVibrate([500, 200, 500, 200, 500]);
@@ -112,6 +118,9 @@ function updateMyNumberStatus() {
   const subText = customerElements.myResultSubText;
   const clearBtn = customerElements.clearMyNumberBtn;
   const vibrateHint = customerElements.myResultVibrateHint;
+
+  // 即時更新上方可領取號碼清單（若顧客輸入號碼，該號碼牌會同步高亮標示）
+  renderPickupReadyNumbers();
 
   if (!valStr || isNaN(valStr)) {
     if (resultBox) resultBox.classList.add('hidden');
@@ -135,30 +144,32 @@ function updateMyNumberStatus() {
 
   const cur = appState.currentNumber;
   const waitingList = Array.isArray(appState.waitingList) ? appState.waitingList : [];
+  const pickupNumbers = getCalledPendingPickupNumbers();
+  const isReadyForPickup = pickupNumbers.includes(myNum);
 
-  // 情況 1：輪到我了！(到號時差 0 人)
-  if (cur !== null && myNum === cur) {
+  // 情況 1：已叫號，可直接前往櫃檯領取！（已叫號但尚未更改為好了）
+  if (isReadyForPickup) {
     resultBox.style.background = 'rgba(16, 185, 129, 0.22)';
     resultBox.style.border = '1.5px solid #10b981';
     resultBox.style.color = '#34d399';
-    mainText.innerHTML = '🎉 輪到您了！請前往櫃檯辦理';
-    subText.textContent = `您持有的號碼為 ${formatNumber(myNum)} 號，請立即至【${appState.settings.counter || '1 號櫃檯'}】辦理！`;
+    mainText.innerHTML = '🎉 您的號碼已叫號！可直接前往櫃檯領取';
+    subText.textContent = `您持有的號碼為 ${formatNumber(myNum)} 號，已叫號完成，請立即至【${appState.settings.counter || '1 號櫃檯'}】領取/辦理！`;
     if (vibrateHint) {
       vibrateHint.innerHTML = '📳 <strong>已到號，手機已發出震動提醒！</strong>';
     }
-    checkAndTriggerVibration(cur);
+    checkAndTriggerVibration(myNum);
     return;
   }
 
-  // 情況 2：號碼已過號
+  // 情況 2：號碼已過號（小於目前叫號且不在可領取名單中）
   if (cur !== null && myNum < cur) {
     resultBox.style.background = 'rgba(239, 68, 68, 0.18)';
     resultBox.style.border = '1.5px solid #ef4444';
     resultBox.style.color = '#f87171';
-    mainText.innerHTML = `⚠️ 您的號碼 ${formatNumber(myNum)} 號可能已過號`;
-    subText.textContent = `現場目前叫至 ${formatNumber(cur)} 號，若您已在現場請向櫃檯人員洽詢辦理！`;
+    mainText.innerHTML = `⚠️ 您的號碼 ${formatNumber(myNum)} 號可能已過號或已取件完成`;
+    subText.textContent = `現場目前叫至 ${formatNumber(cur)} 號，若您尚未領取請直接向櫃檯人員洽詢辦理！`;
     if (vibrateHint) {
-      vibrateHint.innerHTML = 'ℹ️ 若需補辦請洽現場工作人員';
+      vibrateHint.innerHTML = 'ℹ️ 若需補辦或取件請洽現場工作人員';
     }
     return;
   }
@@ -195,6 +206,36 @@ function updateMyNumberStatus() {
   }
 }
 
+// 渲染「可直接到櫃檯領取（已叫號但尚未更改狀態為好了）」號碼清單
+function renderPickupReadyNumbers() {
+  if (!customerElements.pickupNumbersGrid) return;
+
+  const pickupNumbers = getCalledPendingPickupNumbers();
+  const myNumStr = customerElements.myNumberInput ? customerElements.myNumberInput.value.trim() : '';
+  const myNum = myNumStr && !isNaN(myNumStr) ? parseInt(myNumStr, 10) : null;
+
+  if (customerElements.pickupCountBadge) {
+    customerElements.pickupCountBadge.textContent = `${pickupNumbers.length} 個`;
+  }
+
+  if (pickupNumbers.length === 0) {
+    customerElements.pickupNumbersGrid.innerHTML = '<div class="pickup-empty-hint">目前無待領取的已叫號號碼</div>';
+    return;
+  }
+
+  customerElements.pickupNumbersGrid.innerHTML = '';
+  pickupNumbers.forEach(num => {
+    const isMine = (myNum !== null && num === myNum);
+    const pill = document.createElement('div');
+    pill.className = `pickup-pill ${isMine ? 'is-mine' : ''}`;
+    pill.innerHTML = `
+      <span class="pickup-pill-num">${formatNumber(num)} 號</span>
+      <span class="pickup-pill-tag">${isMine ? '您的號碼' : '可領取'}</span>
+    `;
+    customerElements.pickupNumbersGrid.appendChild(pill);
+  });
+}
+
 // 渲染現場叫號看板
 function renderCustomerUI() {
   if (!customerElements.currentNumberDisplay) return;
@@ -229,6 +270,9 @@ function renderCustomerUI() {
   if (customerElements.totalIssuedDisplay) {
     customerElements.totalIssuedDisplay.textContent = appState.lastIssuedNumber || 0;
   }
+
+  // 渲染可至櫃檯領取號碼清單
+  renderPickupReadyNumbers();
 }
 
 function setupCustomerEventListeners() {

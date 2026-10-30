@@ -1448,3 +1448,81 @@ body {
   color: #0f172a !important;
   font-weight: 800;
 }
+
+/* 顧客端：可直接到櫃檯領取（已叫號但未更改狀態為好了的號碼） */
+.pickup-ready-card {
+  margin-top: 14px;
+  padding: 16px 18px;
+  border-radius: 16px;
+  background: rgba(30, 41, 59, 0.75);
+  backdrop-filter: blur(10px);
+  border: 1.5px solid rgba(52, 211, 153, 0.3);
+  box-shadow: 0 4px 20px rgba(16, 185, 129, 0.08);
+}
+
+.pickup-numbers-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-height: 44px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.pickup-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.22), rgba(5, 150, 105, 0.12));
+  border: 1.5px solid #10b981;
+  box-shadow: 0 3px 10px rgba(16, 185, 129, 0.2);
+  transition: all 0.2s ease;
+}
+
+.pickup-pill-num {
+  font-family: var(--font-digital, 'Share Tech Mono', monospace);
+  font-size: 1.35rem;
+  font-weight: 900;
+  color: #34d399;
+  letter-spacing: 1px;
+}
+
+.pickup-pill-tag {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #064e3b;
+  background: #34d399;
+  padding: 2px 7px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+/* 若正好是顧客輸入的號碼牌 */
+.pickup-pill.is-mine {
+  border: 2px solid #fbbf24 !important;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.35), rgba(217, 119, 6, 0.2)) !important;
+  box-shadow: 0 0 16px rgba(251, 191, 36, 0.6) !important;
+  transform: scale(1.04);
+}
+
+.pickup-pill.is-mine .pickup-pill-num {
+  color: #fbbf24 !important;
+}
+
+.pickup-pill.is-mine .pickup-pill-tag {
+  background: #fbbf24 !important;
+  color: #78350f !important;
+}
+
+.pickup-empty-hint {
+  color: #94a3b8;
+  font-size: 0.88rem;
+  text-align: center;
+  width: 100%;
+  padding: 12px 0;
+  background: rgba(15, 23, 42, 0.4);
+  border-radius: 10px;
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+}
