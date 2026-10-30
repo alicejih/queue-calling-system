@@ -24,8 +24,11 @@
         </div>
       </div>
       <div class="header-controls">
-        <button id="openCustomerViewBtn" class="pill-btn highlight-link" title="在新分頁開啟現場顧客大看板">
-          <span class="icon">🖥️</span> 現場顧客大看板
+        <button id="showQrCodeBtn" class="pill-btn highlight-link" title="顯示顧客手機掃描查號 QR Code">
+          <span class="icon">📱</span> 顧客手機 QR Code
+        </button>
+        <button id="openCustomerViewBtn" class="pill-btn" title="在新分頁開啟顧客端網頁">
+          <span class="icon">🔗</span> 顧客查號頁
         </button>
         <button id="voiceToggleBtn" class="pill-btn active" title="切換後台語音提示">
           <span class="icon">🔊</span> 語音：<span id="voiceStatusText">開啟</span>
@@ -128,6 +131,7 @@
           <div class="filter-tabs">
             <button class="tab-btn active" data-tab="waiting">等候中 (<span id="tabWaitingCount">0</span>)</button>
             <button class="tab-btn" data-tab="completed">已完成 (<span id="tabCompletedCount">0</span>)</button>
+            <button class="tab-btn" data-tab="logs">即時日誌 (<span id="tabLogsCount">0</span>)</button>
           </div>
         </div>
 
@@ -165,6 +169,29 @@
             </div>
           </div>
         </div>
+
+        <!-- 即時活動日誌容器 (即時 CSV / JSON 紀錄預覽) -->
+        <div id="logsListContainer" class="queue-list-container hidden">
+          <div class="completed-table-wrap">
+            <table class="completed-table">
+              <thead>
+                <tr>
+                  <th>時間</th>
+                  <th>操作動作</th>
+                  <th>排隊號碼</th>
+                  <th>服務櫃檯</th>
+                  <th>備註詳細</th>
+                </tr>
+              </thead>
+              <tbody id="adminLogsTableBody">
+                <!-- 動態注入每一筆動作紀錄 -->
+              </tbody>
+            </table>
+            <div id="adminEmptyLogsNotice" class="empty-notice">
+              <p>尚無操作紀錄，點擊「叫號」或「取號」時會自動寫入此處。</p>
+            </div>
+          </div>
+        </div>
       </section>
     </main>
 
@@ -172,6 +199,22 @@
     <footer class="footer">
       <p>智慧叫號排隊系統 &copy; <span id="currentYear">2026</span> | 櫃檯管理端 | 即時雙向連動現場大看板</p>
     </footer>
+  </div>
+
+  <!-- 顧客手機查號 QR Code 彈窗 -->
+  <div id="qrModal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-notch"></div>
+      <h3>📱 顧客手機查號 QR Code</h3>
+      <p class="modal-desc">顧客使用手機相機掃描下方 QR Code，即可在手機隨身查號看進度：</p>
+      <div class="qr-image-wrap" style="margin: 16px 0; display: flex; justify-content: center;">
+        <img id="qrImage" src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=https://alicejih.github.io/queue-calling-system/" alt="顧客查號 QR Code" style="border-radius: 12px; border: 2px solid #e2e8f0; width: 200px; height: 200px;">
+      </div>
+      <p class="modal-meta" style="word-break: break-all; font-size: 0.8rem; color: #64748b; margin-bottom: 16px;">
+        網址：https://alicejih.github.io/queue-calling-system/
+      </p>
+      <button id="closeQrModalBtn" class="modal-btn">關閉視窗</button>
+    </div>
   </div>
 
   <script src="https://unpkg.com/mqtt@5.3.5/dist/mqtt.min.js"></script>

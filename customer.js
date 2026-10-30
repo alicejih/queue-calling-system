@@ -1,23 +1,36 @@
 /**
- * 智慧叫號排隊系統 - 顧客端邏輯 (Customer / Public Display Logic)
- * 專為現場顧客、候診/等候大螢幕、取號平板設計
+ * 智慧叫號排隊系統 - 顧客手機查號專屬邏輯 (Mobile Customer Queue Portal)
+ * 專為顧客使用自己手機查閱、線上領取號碼牌、即時追蹤進度設計
  */
 
+const MY_TICKET_STORAGE_KEY = 'MY_CUSTOMER_TICKET_NUMBER';
+
 const customerElements = {
-  // 大看板
+  // 我的號碼牌區塊
+  noTicketBox: document.getElementById('noTicketBox'),
+  hasTicketBox: document.getElementById('hasTicketBox'),
+  myTicketNumDisplay: document.getElementById('myTicketNumDisplay'),
+  myTicketStatusBox: document.getElementById('myTicketStatusBox'),
+  myStatusIcon: document.getElementById('myStatusIcon'),
+  myStatusTitle: document.getElementById('myStatusTitle'),
+  myStatusDesc: document.getElementById('myStatusDesc'),
+  myProgressBarFill: document.getElementById('myProgressBarFill'),
+  cancelMyTicketBtn: document.getElementById('cancelMyTicketBtn'),
+
+  // 手機取號與手動追蹤
+  getTicketBtn: document.getElementById('getTicketBtn'),
+  manualTicketInput: document.getElementById('manualTicketInput'),
+  trackManualTicketBtn: document.getElementById('trackManualTicketBtn'),
+
+  // 現場看板
   currentNumberDisplay: document.getElementById('currentNumberDisplay'),
   displaySubtext: document.getElementById('displaySubtext'),
   activeCounterBadge: document.getElementById('activeCounterBadge'),
-
-  // 取號區
-  getTicketBtn: document.getElementById('getTicketBtn'),
-  lastTicketNumber: document.getElementById('lastTicketNumber'),
-  lastTicketTime: document.getElementById('lastTicketTime'),
   waitingCountDisplay: document.getElementById('waitingCountDisplay'),
   totalIssuedDisplay: document.getElementById('totalIssuedDisplay'),
   liveClock: document.getElementById('liveClock'),
 
-  // 等候進度看板 (只讀，不可標記完成)
+  // 現場等候名單
   waitingGrid: document.getElementById('waitingGrid'),
   emptyWaitingNotice: document.getElementById('emptyWaitingNotice'),
   waitingBadgeCount: document.getElementById('waitingBadgeCount'),
@@ -27,9 +40,8 @@ const customerElements = {
   voiceStatusText: document.getElementById('voiceStatusText'),
   soundToggleBtn: document.getElementById('soundToggleBtn'),
   soundStatusText: document.getElementById('soundStatusText'),
-  fullscreenBtn: document.getElementById('fullscreenBtn'),
 
-  // 取號成功彈窗
+  // 彈窗
   ticketModal: document.getElementById('ticketModal'),
   modalTicketNumber: document.getElementById('modalTicketNumber'),
   modalTicketMeta: document.getElementById('modalTicketMeta'),
@@ -37,8 +49,19 @@ const customerElements = {
   currentYear: document.getElementById('currentYear')
 };
 
+// 記錄這隻手機當前追蹤的號碼
+let myTrackedNumber = null;
+let lastNotifiedCallNumber = null;
+
 function initCustomerView() {
   loadState();
+
+  // 從手機本地儲存讀取這隻手機先前領取或追蹤的號碼
+  const cachedMyNum = localStorage.getItem(MY_TICKET_STORAGE_KEY);
+  if (cachedMyNum) {
+    myTrackedNumber = parseInt(cachedMyNum, 10);
+  }
+
   setupCustomerEventListeners();
   updateClock();
   setInterval(updateClock, 1000);
@@ -51,12 +74,14 @@ function initCustomerView() {
     customerElements.currentYear.textContent = new Date().getFullYear();
   }
 
-  // 監聽來自管理端後台的即時操作 (叫號、標記完成、重置等)
+  // 監聽來自店家櫃檯後台的即時叫號操作
   listenToSyncEvents((event) => {
-    if (event.type === 'CALL_NUMBER') {
-      triggerCallingEffect(event.number, event.counter);
-    }
     renderCustomerUI();
+
+    // 如果輪到這隻手機的號碼，或正在叫號
+    if (event.type === 'CALL_NUMBER') {
+      handleIncomingCallEvent(event.number, event.counter);
+    }
   });
 }
 
@@ -76,24 +101,38 @@ function updateDurations() {
   });
 }
 
-// 觸發大螢幕叫號特效與廣播
-function triggerCallingEffect(number, counter) {
-  // 畫面數字跳動與發光閃爍
+// 收到叫號事件時的顧客端處理
+function handleIncomingCallEvent(calledNum, counter) {
+  // 畫面數字閃爍
   if (customerElements.currentNumberDisplay) {
     customerElements.currentNumberDisplay.classList.remove('flash');
-    void customerElements.currentNumberDisplay.offsetWidth; // 強制重繪
+    void customerElements.currentNumberDisplay.offsetWidth;
     customerElements.currentNumberDisplay.classList.add('flash');
   }
 
-  // 播放叮咚與語音
-  playDingDong();
-  speakCall(number, counter || appState.settings.counter);
+  // 檢查是否輪到這隻手機的號碼！
+  if (myTrackedNumber && myTrackedNumber === calledNum) {
+    // 震動手機！(如果手機支援震動 API)
+    if ('vibrate' in navigator) {
+      try {
+        navigator.vibrate([400, 200, 400, 200, 400]);
+      } catch (e) {}
+    }
+
+    // 播放提示音與真人廣播
+    playDingDong(true);
+    speakCall(calledNum, counter || appState.settings.counter, true);
+  } else {
+    // 一般叫號（非我的號碼時，若有開提示音則播放輕音）
+    playDingDong();
+    speakCall(calledNum, counter || appState.settings.counter);
+  }
 }
 
-// 顧客取號動作
+// 顧客在手機上點「立即線上領取號碼牌」
 function handleCustomerTakeTicket() {
   loadState(); // 確保讀取最新發號流水號與等候名單
-  getAudioContext(); // 解鎖瀏覽器音效限制
+  getAudioContext();
 
   appState.lastIssuedNumber += 1;
   const currentNum = appState.lastIssuedNumber;
@@ -107,25 +146,54 @@ function handleCustomerTakeTicket() {
   };
 
   appState.waitingList.push(ticket);
+  const waitPeople = appState.waitingList.length - 1;
+  logActivity('顧客手機線上取號', currentNum, '', waitPeople > 0 ? `前方等候 ${waitPeople} 人` : '無人等候');
   saveState('TICKET_TAKEN', { ticket });
 
-  renderCustomerUI();
+  // 記錄這隻手機的專屬號碼
+  setMyTrackedNumber(currentNum);
 
-  // 彈窗顯示號碼
-  const formatted = formatNumber(currentNum);
-  customerElements.modalTicketNumber.textContent = formatted;
-  const waitPeople = appState.waitingList.length - 1;
+  // 顯示彈窗提示
+  customerElements.modalTicketNumber.textContent = formatNumber(currentNum);
   customerElements.modalTicketMeta.textContent = waitPeople > 0
-    ? `前面還有 ${waitPeople} 位在等候，請留意現場叫號大螢幕！`
-    : `目前無人等候，請留意即將為您叫號！`;
+    ? `前面還有 ${waitPeople} 位在等候，手機將為您即時提醒！`
+    : `目前無人等候，即將為您辦理！`;
 
   customerElements.ticketModal.classList.remove('hidden');
   playSuccessChime();
+  renderCustomerUI();
 }
 
-// 渲染顧客端畫面
+// 手動輸入已拿到的紙本號碼牌
+function handleTrackManualTicket() {
+  const val = parseInt(customerElements.manualTicketInput.value, 10);
+  if (!val || val <= 0) {
+    alert('請輸入正確的排隊號碼（例如：5）');
+    return;
+  }
+  setMyTrackedNumber(val);
+  customerElements.manualTicketInput.value = '';
+  renderCustomerUI();
+}
+
+// 設定當前追蹤的號碼
+function setMyTrackedNumber(num) {
+  myTrackedNumber = num;
+  localStorage.setItem(MY_TICKET_STORAGE_KEY, String(num));
+}
+
+// 取消/更換號碼
+function handleCancelMyTicket() {
+  if (confirm('確定要更換或取消追蹤目前的號碼牌嗎？')) {
+    myTrackedNumber = null;
+    localStorage.removeItem(MY_TICKET_STORAGE_KEY);
+    renderCustomerUI();
+  }
+}
+
+// 渲染顧客端手機畫面
 function renderCustomerUI() {
-  // 1. 叫號大看板
+  // 1. 現場目前叫號看板
   if (appState.currentNumber !== null) {
     customerElements.currentNumberDisplay.textContent = formatNumber(appState.currentNumber);
     if (customerElements.activeCounterBadge) {
@@ -136,31 +204,97 @@ function renderCustomerUI() {
   } else {
     customerElements.currentNumberDisplay.textContent = '---';
     if (customerElements.activeCounterBadge) {
-      customerElements.activeCounterBadge.textContent = '櫃檯待命中';
+      customerElements.activeCounterBadge.textContent = '待命中';
     }
     customerElements.displaySubtext.textContent = appState.waitingList.length > 0
-      ? `目前有 ${appState.waitingList.length} 位貴賓等候中，請稍候`
-      : '目前暫無叫號中顧客，歡迎點擊右側按鈕取號';
+      ? `目前有 ${appState.waitingList.length} 位貴賓等候中`
+      : '目前暫無叫號中顧客';
     customerElements.displaySubtext.classList.remove('highlight');
   }
 
-  // 2. 取號統計
+  // 統計數字
   customerElements.waitingCountDisplay.textContent = appState.waitingList.length;
   customerElements.totalIssuedDisplay.textContent = appState.lastIssuedNumber;
   if (customerElements.waitingBadgeCount) {
     customerElements.waitingBadgeCount.textContent = appState.waitingList.length;
   }
 
-  if (appState.lastIssuedNumber > 0) {
-    customerElements.lastTicketNumber.textContent = formatNumber(appState.lastIssuedNumber);
-    const lastItem = appState.waitingList.find(t => t.number === appState.lastIssuedNumber);
-    customerElements.lastTicketTime.textContent = lastItem ? `取號時間 ${lastItem.time}` : '已開始服務';
-  } else {
-    customerElements.lastTicketNumber.textContent = '--';
-    customerElements.lastTicketTime.textContent = '今日尚無取號';
+  // 2. 核心：顧客的手機號碼牌卡片狀態 (My Ticket Box)
+  renderMyTicketCard();
+
+  // 3. 現場等候名單
+  renderMobileQueueList();
+}
+
+// 渲染「我的號碼牌」狀態卡片
+function renderMyTicketCard() {
+  if (!myTrackedNumber) {
+    // 尚未領取或輸入號碼
+    customerElements.noTicketBox.classList.remove('hidden');
+    customerElements.hasTicketBox.classList.add('hidden');
+    return;
   }
 
-  // 3. 現場等候號碼進度（純展示，顧客不可標記完成）
+  // 已有號碼
+  customerElements.noTicketBox.classList.add('hidden');
+  customerElements.hasTicketBox.classList.remove('hidden');
+  customerElements.myTicketNumDisplay.textContent = formatNumber(myTrackedNumber);
+
+  const cur = appState.currentNumber;
+  const isServingMe = (cur !== null && cur === myTrackedNumber);
+  const myIndexInWait = appState.waitingList.findIndex(t => t.number === myTrackedNumber);
+  const isCompleted = appState.completedList.some(t => t.number === myTrackedNumber);
+
+  customerElements.myTicketStatusBox.className = 'my-status-box';
+
+  if (isServingMe) {
+    // ★ 輪到我了！★
+    customerElements.myTicketStatusBox.classList.add('calling-status');
+    customerElements.myStatusIcon.textContent = '🔔';
+    customerElements.myStatusTitle.textContent = '輪到您了！請前往辦理';
+    customerElements.myStatusDesc.textContent = `請攜帶您的號碼牌，立即前往【${appState.settings.counter || '1 號櫃檯'}】辦理！`;
+    customerElements.myProgressBarFill.style.width = '100%';
+  } else if (myIndexInWait !== -1) {
+    // 還在等候隊列中
+    customerElements.myTicketStatusBox.classList.add('waiting-status');
+    customerElements.myStatusIcon.textContent = '⏳';
+    const ahead = myIndexInWait;
+    if (ahead === 0) {
+      customerElements.myStatusTitle.textContent = '下一位即將輪到您！';
+      customerElements.myStatusDesc.textContent = '您是隊列中的第一位，請至櫃檯附近準備！';
+      customerElements.myProgressBarFill.style.width = '85%';
+    } else {
+      customerElements.myStatusTitle.textContent = `前面還有 ${ahead} 位貴賓等候中`;
+      const estMin = ahead * 3;
+      customerElements.myStatusDesc.textContent = `預估等候時間約 ${estMin} 分鐘，您可以先至附近休息。`;
+      customerElements.myProgressBarFill.style.width = `${Math.max(15, 100 - (ahead * 15))}%`;
+    }
+  } else if (isCompleted) {
+    // 已經服務完成
+    customerElements.myTicketStatusBox.classList.add('done-status');
+    customerElements.myStatusIcon.textContent = '✅';
+    customerElements.myStatusTitle.textContent = '服務已完成';
+    customerElements.myStatusDesc.textContent = '感謝您的光臨，您的業務已於今日順利辦理完成！';
+    customerElements.myProgressBarFill.style.width = '100%';
+  } else if (cur !== null && cur > myTrackedNumber) {
+    // 可能已過號
+    customerElements.myTicketStatusBox.classList.add('passed-status');
+    customerElements.myStatusIcon.textContent = '⚠️';
+    customerElements.myStatusTitle.textContent = '號碼可能已過號';
+    customerElements.myStatusDesc.textContent = `現場目前叫至 ${formatNumber(cur)} 號，若您已在現場，請向櫃檯人員洽詢辦理。`;
+    customerElements.myProgressBarFill.style.width = '100%';
+  } else {
+    // 等候開始
+    customerElements.myTicketStatusBox.classList.add('waiting-status');
+    customerElements.myStatusIcon.textContent = '⏳';
+    customerElements.myStatusTitle.textContent = '號碼牌已登錄';
+    customerElements.myStatusDesc.textContent = '系統隨時為您追蹤現場最新叫號進度！';
+    customerElements.myProgressBarFill.style.width = '20%';
+  }
+}
+
+// 渲染現場等候名單 (手機簡潔版)
+function renderMobileQueueList() {
   customerElements.waitingGrid.innerHTML = '';
   if (appState.waitingList.length === 0) {
     customerElements.emptyWaitingNotice.classList.remove('hidden');
@@ -168,19 +302,19 @@ function renderCustomerUI() {
     customerElements.emptyWaitingNotice.classList.add('hidden');
     appState.waitingList.forEach(ticket => {
       const isCurrent = (ticket.number === appState.currentNumber);
+      const isMine = (myTrackedNumber && ticket.number === myTrackedNumber);
       const card = document.createElement('div');
-      card.className = `ticket-item-card customer-view ${isCurrent ? 'is-current' : ''}`;
+      card.className = `ticket-item-card customer-view ${isCurrent ? 'is-current' : ''} ${isMine ? 'is-mine' : ''}`;
 
       card.innerHTML = `
-        <span class="ticket-badge-current">${isCurrent ? '🔔 叫號中' : '⏳ 等候中'}</span>
+        <span class="ticket-badge-current">
+          ${isMine ? '★ 您的號碼' : (isCurrent ? '🔔 叫號中' : '等候中')}
+        </span>
         <div class="card-num-row">
           <span class="item-num">${formatNumber(ticket.number)}</span>
           <span class="item-wait-badge" data-ts="${ticket.timestamp}">${calculateWaitDurationText(ticket.timestamp)}</span>
         </div>
         <div class="item-time-info">取號時間：${ticket.time}</div>
-        <div class="customer-card-status">
-          ${isCurrent ? '★ 請至櫃檯辦理 ★' : '請留意叫號廣播'}
-        </div>
       `;
 
       customerElements.waitingGrid.appendChild(card);
@@ -192,27 +326,32 @@ function updateAudioControlsUI() {
   if (customerElements.voiceToggleBtn) {
     if (appState.settings.voiceEnabled) {
       customerElements.voiceToggleBtn.classList.add('active');
-      customerElements.voiceStatusText.textContent = '開啟';
     } else {
       customerElements.voiceToggleBtn.classList.remove('active');
-      customerElements.voiceStatusText.textContent = '靜音';
     }
   }
 
   if (customerElements.soundToggleBtn) {
     if (appState.settings.soundEnabled) {
       customerElements.soundToggleBtn.classList.add('active');
-      customerElements.soundStatusText.textContent = '開啟';
     } else {
       customerElements.soundToggleBtn.classList.remove('active');
-      customerElements.soundStatusText.textContent = '靜音';
     }
   }
 }
 
 function setupCustomerEventListeners() {
-  // 取號
+  // 線上取號
   customerElements.getTicketBtn.addEventListener('click', handleCustomerTakeTicket);
+
+  // 手動追蹤紙本號碼
+  customerElements.trackManualTicketBtn.addEventListener('click', handleTrackManualTicket);
+  customerElements.manualTicketInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') handleTrackManualTicket();
+  });
+
+  // 取消/更換號碼
+  customerElements.cancelMyTicketBtn.addEventListener('click', handleCancelMyTicket);
 
   // 關閉小票彈窗
   customerElements.modalCloseBtn.addEventListener('click', () => {
@@ -224,34 +363,19 @@ function setupCustomerEventListeners() {
     }
   });
 
-  // 音效與語音
-  if (customerElements.voiceToggleBtn) {
-    customerElements.voiceToggleBtn.addEventListener('click', () => {
-      appState.settings.voiceEnabled = !appState.settings.voiceEnabled;
-      updateAudioControlsUI();
-      saveState('SETTINGS_UPDATED');
-    });
-  }
+  // 音效與語音開關
+  customerElements.voiceToggleBtn.addEventListener('click', () => {
+    appState.settings.voiceEnabled = !appState.settings.voiceEnabled;
+    updateAudioControlsUI();
+    saveState('SETTINGS_UPDATED');
+  });
 
-  if (customerElements.soundToggleBtn) {
-    customerElements.soundToggleBtn.addEventListener('click', () => {
-      appState.settings.soundEnabled = !appState.settings.soundEnabled;
-      updateAudioControlsUI();
-      saveState('SETTINGS_UPDATED');
-      if (appState.settings.soundEnabled) playDingDong();
-    });
-  }
-
-  // 全螢幕
-  if (customerElements.fullscreenBtn) {
-    customerElements.fullscreenBtn.addEventListener('click', () => {
-      if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen().catch(() => {});
-      } else {
-        if (document.exitFullscreen) document.exitFullscreen();
-      }
-    });
-  }
+  customerElements.soundToggleBtn.addEventListener('click', () => {
+    appState.settings.soundEnabled = !appState.settings.soundEnabled;
+    updateAudioControlsUI();
+    saveState('SETTINGS_UPDATED');
+    if (appState.settings.soundEnabled) playDingDong();
+  });
 }
 
 window.addEventListener('DOMContentLoaded', initCustomerView);

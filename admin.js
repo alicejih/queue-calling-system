@@ -18,12 +18,17 @@ const adminElements = {
   emptyWaitingNotice: document.getElementById('adminEmptyWaitingNotice'),
   completedTableBody: document.getElementById('adminCompletedTableBody'),
   emptyCompletedNotice: document.getElementById('adminEmptyCompletedNotice'),
+  logsTableBody: document.getElementById('adminLogsTableBody'),
+  emptyLogsNotice: document.getElementById('adminEmptyLogsNotice'),
+
   waitingListContainer: document.getElementById('waitingListContainer'),
   completedListContainer: document.getElementById('completedListContainer'),
+  logsListContainer: document.getElementById('logsListContainer'),
 
   // 計數器標籤
   tabWaitingCount: document.getElementById('tabWaitingCount'),
   tabCompletedCount: document.getElementById('tabCompletedCount'),
+  tabLogsCount: document.getElementById('tabLogsCount'),
   adminWaitingTotal: document.getElementById('adminWaitingTotal'),
   adminIssuedTotal: document.getElementById('adminIssuedTotal'),
   adminCompletedTotal: document.getElementById('adminCompletedTotal'),
@@ -77,12 +82,15 @@ function updateDurations() {
   });
 }
 
-// 叫指定號碼
+// 叫指定號碼 (自動寫入一筆活動日誌)
 function adminCall(number) {
   loadState(); // 確保讀取最新狀態
   getAudioContext();
   appState.currentNumber = number;
   const currentCounter = appState.settings.counter || '1 號櫃檯';
+
+  // 寫入動作日誌 (即時紀錄於 JSON / CSV 資料庫)
+  logActivity('叫號呼叫', number, currentCounter, '櫃檯廣播叫號');
 
   saveState('CALL_NUMBER', {
     number: number,
@@ -133,7 +141,7 @@ function adminCallPrev() {
   }
 }
 
-// 重新叫號
+// 重新叫號 (自動寫入一筆活動日誌)
 function adminRepeatCall() {
   loadState();
   if (appState.currentNumber === null) {
@@ -144,10 +152,12 @@ function adminRepeatCall() {
     }
     return;
   }
+
+  logActivity('重新叫號', appState.currentNumber, appState.settings.counter, '再次廣播');
   adminCall(appState.currentNumber);
 }
 
-// 櫃檯代客發號
+// 櫃檯代客發號 (自動寫入一筆活動日誌)
 function adminIssueTicket() {
   loadState(); // 確保流水號最新
   getAudioContext();
@@ -163,13 +173,14 @@ function adminIssueTicket() {
   };
 
   appState.waitingList.push(ticket);
+  logActivity('櫃檯代客發號', currentNum, appState.settings.counter, '櫃檯發出新號碼');
   saveState('TICKET_TAKEN', { ticket });
 
   renderAdminUI();
   playSuccessChime();
 }
 
-// 核心功能 3：點擊列表號碼代表這一號好了！
+// 核心功能 3：點擊列表號碼代表這一號好了！(自動寫入一筆活動日誌)
 function markTicketCompleted(ticketId) {
   loadState(); // 確保以最新狀態操作
   const index = appState.waitingList.findIndex(t => t.id === ticketId);
@@ -187,6 +198,9 @@ function markTicketCompleted(ticketId) {
     duration: durationMinutes,
     counter: appState.settings.counter || '1 號櫃檯'
   });
+
+  // 自動寫入完成日誌
+  logActivity('服務完成(這號好了)', ticket.number, appState.settings.counter, `等候歷時約 ${durationMinutes} 分鐘`);
 
   playSuccessChime();
 
@@ -221,56 +235,48 @@ function undoCompleted(ticketId) {
   });
 
   appState.waitingList.sort((a, b) => a.number - b.number);
+  logActivity('誤按復原', item.number, '', '放回等候隊列');
   saveState('TICKET_RESTORED');
   renderAdminUI();
 }
 
-// 匯出 CSV 試算表報表 (Excel 可直接開)
+// 匯出 CSV 試算表報表 (包含完整每一次叫號日誌，Excel 直接開啟)
 function exportToCSV() {
   loadState();
-  const allRecords = [
-    ...appState.completedList.map(t => ({
-      number: formatNumber(t.number),
-      time: t.time,
-      completedTime: t.completedTime,
-      duration: `${t.duration} 分鐘`,
-      status: '已完成服務',
-      counter: t.counter || appState.settings.counter || '1 號櫃檯'
-    })),
-    ...appState.waitingList.map(t => ({
-      number: formatNumber(t.number),
-      time: t.time,
-      completedTime: '--',
-      duration: calculateWaitDurationText(t.timestamp),
-      status: (t.number === appState.currentNumber) ? '叫號中' : '等候中',
-      counter: (t.number === appState.currentNumber) ? (appState.settings.counter || '1 號櫃檯') : '--'
-    }))
-  ];
+  const logs = appState.activityLogs || [];
 
-  if (allRecords.length === 0) {
+  if (logs.length === 0 && appState.completedList.length === 0 && appState.waitingList.length === 0) {
     alert('今日尚無任何叫號或取號紀錄可供匯出！');
     return;
   }
 
   // 加上 UTF-8 BOM (\uFEFF) 讓 Excel 打開不會亂碼
-  let csvContent = '\uFEFF排隊號碼,取號時間,完成時間,等候歷時,服務狀態,服務櫃檯\n';
-  allRecords.forEach(r => {
-    csvContent += `"${r.number}","${r.time}","${r.completedTime}","${r.duration}","${r.status}","${r.counter}"\n`;
-  });
+  let csvContent = '\uFEFF紀錄序號,日期,時間,操作動作,排隊號碼,服務櫃檯,備註詳細\n';
+  
+  if (logs.length > 0) {
+    logs.forEach((log, idx) => {
+      csvContent += `"${logs.length - idx}","${log.date}","${log.time}","${log.action}","${log.number}","${log.counter}","${log.note}"\n`;
+    });
+  } else {
+    // 備援：若無 activityLogs 則匯出 completedList
+    appState.completedList.forEach((t, idx) => {
+      csvContent += `"${idx + 1}","今日","${t.completedTime}","服務完成","${formatNumber(t.number)}","${t.counter || '1 號櫃檯'}","等候約 ${t.duration} 分鐘"\n`;
+    });
+  }
 
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   const dateStr = new Date().toISOString().split('T')[0];
   a.href = url;
-  a.download = `叫號服務紀錄報表_${dateStr}.csv`;
+  a.download = `叫號服務完整日誌紀錄_${dateStr}.csv`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
 
-// 匯出 JSON 完整資料
+// 匯出 JSON 完整資料 (包含完整狀態與每筆叫號紀錄)
 function exportToJSON() {
   loadState();
   const jsonStr = JSON.stringify(appState, null, 2);
@@ -279,7 +285,7 @@ function exportToJSON() {
   const a = document.createElement('a');
   const dateStr = new Date().toISOString().split('T')[0];
   a.href = url;
-  a.download = `queue_backup_${dateStr}.json`;
+  a.download = `queue_full_records_${dateStr}.json`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -293,7 +299,7 @@ function importFromJSON(file) {
   reader.onload = (e) => {
     try {
       const parsed = JSON.parse(e.target.result);
-      if (parsed && Array.isArray(parsed.waitingList)) {
+      if (parsed && (Array.isArray(parsed.waitingList) || Array.isArray(parsed.activityLogs))) {
         applyIncomingState(parsed, 'RESTORE_BACKUP');
         saveState('RESTORE_BACKUP');
         alert('🎉 成功匯入並還原叫號排隊紀錄！');
@@ -324,8 +330,10 @@ function renderAdminUI() {
   }
 
   // 2. 統計數據
+  const logCount = (appState.activityLogs || []).length;
   if (adminElements.tabWaitingCount) adminElements.tabWaitingCount.textContent = appState.waitingList.length;
   if (adminElements.tabCompletedCount) adminElements.tabCompletedCount.textContent = appState.completedList.length;
+  if (adminElements.tabLogsCount) adminElements.tabLogsCount.textContent = logCount;
   if (adminElements.adminWaitingTotal) adminElements.adminWaitingTotal.textContent = appState.waitingList.length;
   if (adminElements.adminIssuedTotal) adminElements.adminIssuedTotal.textContent = appState.lastIssuedNumber;
   if (adminElements.adminCompletedTotal) adminElements.adminCompletedTotal.textContent = appState.completedList.length;
@@ -389,6 +397,7 @@ function renderAdminUI() {
         <td>${ticket.time}</td>
         <td>${ticket.completedTime}</td>
         <td>約 ${ticket.duration} 分鐘</td>
+        <td>${ticket.counter || '1 號櫃檯'}</td>
         <td>
           <button class="undo-btn" data-id="${ticket.id}" title="誤按復原">↩ 復原</button>
         </td>
@@ -401,6 +410,33 @@ function renderAdminUI() {
 
       adminElements.completedTableBody.appendChild(tr);
     });
+  }
+
+  // 5. 即時動作日誌 (即時 CSV / JSON 紀錄預覽)
+  if (adminElements.logsTableBody) {
+    adminElements.logsTableBody.innerHTML = '';
+    const logs = appState.activityLogs || [];
+    if (logs.length === 0) {
+      if (adminElements.emptyLogsNotice) adminElements.emptyLogsNotice.classList.remove('hidden');
+    } else {
+      if (adminElements.emptyLogsNotice) adminElements.emptyLogsNotice.classList.add('hidden');
+      logs.forEach(log => {
+        const tr = document.createElement('tr');
+        let badgeClass = 'badge-call';
+        if (log.action.includes('取號')) badgeClass = 'badge-ticket';
+        if (log.action.includes('完成')) badgeClass = 'badge-complete';
+        if (log.action.includes('重置')) badgeClass = 'badge-danger';
+
+        tr.innerHTML = `
+          <td>${log.time}</td>
+          <td><span class="action-tag ${badgeClass}">${log.action}</span></td>
+          <td><span class="num-tag">${log.number}</span></td>
+          <td>${log.counter}</td>
+          <td>${log.note}</td>
+        `;
+        adminElements.logsTableBody.appendChild(tr);
+      });
+    }
   }
 }
 
@@ -440,19 +476,23 @@ function setupAdminEventListeners() {
     renderAdminUI();
   });
 
-  // 頁籤切換
+  // 頁籤切換 (等候中 / 已完成 / 即時日誌)
   adminElements.tabBtns.forEach(btn => {
     btn.addEventListener('click', () => {
       adminElements.tabBtns.forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
 
       const tab = btn.dataset.tab;
+      adminElements.waitingListContainer.classList.add('hidden');
+      adminElements.completedListContainer.classList.add('hidden');
+      if (adminElements.logsListContainer) adminElements.logsListContainer.classList.add('hidden');
+
       if (tab === 'waiting') {
         adminElements.waitingListContainer.classList.remove('hidden');
-        adminElements.completedListContainer.classList.add('hidden');
-      } else {
-        adminElements.waitingListContainer.classList.add('hidden');
+      } else if (tab === 'completed') {
         adminElements.completedListContainer.classList.remove('hidden');
+      } else if (tab === 'logs') {
+        if (adminElements.logsListContainer) adminElements.logsListContainer.classList.remove('hidden');
       }
     });
   });
@@ -471,10 +511,31 @@ function setupAdminEventListeners() {
     if (appState.settings.soundEnabled) playDingDong();
   });
 
-  // 打開顧客大看板 (在新視窗開啟，方便雙螢幕顯示)
+  // 顧客手機查號 QR Code 彈窗
+  const showQrBtn = document.getElementById('showQrCodeBtn');
+  const qrModal = document.getElementById('qrModal');
+  const closeQrBtn = document.getElementById('closeQrModalBtn');
+
+  if (showQrBtn && qrModal) {
+    showQrBtn.addEventListener('click', () => {
+      qrModal.classList.remove('hidden');
+    });
+  }
+  if (closeQrBtn && qrModal) {
+    closeQrBtn.addEventListener('click', () => {
+      qrModal.classList.add('hidden');
+    });
+  }
+  if (qrModal) {
+    qrModal.addEventListener('click', (e) => {
+      if (e.target === qrModal) qrModal.classList.add('hidden');
+    });
+  }
+
+  // 打開顧客端網頁
   if (adminElements.openCustomerViewBtn) {
     adminElements.openCustomerViewBtn.addEventListener('click', () => {
-      window.open('index.html', 'CustomerDisplayWindow');
+      window.open('index.html', 'CustomerWindow');
     });
   }
 
@@ -500,6 +561,7 @@ function setupAdminEventListeners() {
   // 重置歸零
   adminElements.resetAllBtn.addEventListener('click', () => {
     if (confirm('確定要清空今天所有號碼與排隊紀錄並歸零嗎？此動作將同步清除現場大螢幕！建議清空前可先點「📥 匯出 CSV」留存紀錄。')) {
+      logActivity('系統歸零重置', '--', '--', '清空今日排隊資料');
       appState.currentNumber = null;
       appState.lastIssuedNumber = 0;
       appState.waitingList = [];

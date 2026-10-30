@@ -20,10 +20,12 @@ const defaultState = {
   lastIssuedNumber: 0,
   waitingList: [],
   completedList: [],
+  activityLogs: [], // 每一次叫號、取號、完成都會自動寫入這裡！
   settings: {
     voiceEnabled: true,
     soundEnabled: true,
-    counter: '1 號櫃檯'
+    counter: '1 號櫃檯',
+    webhookUrl: '' // 可選的 Google Sheet Webhook，點叫號時自動同步寫入線上 Google 試算表！
   }
 };
 
@@ -72,6 +74,7 @@ function loadState() {
       appState.lastIssuedNumber = parsed.lastIssuedNumber ?? 0;
       appState.waitingList = Array.isArray(parsed.waitingList) ? parsed.waitingList : [];
       appState.completedList = Array.isArray(parsed.completedList) ? parsed.completedList : [];
+      appState.activityLogs = Array.isArray(parsed.activityLogs) ? parsed.activityLogs : [];
       if (parsed.settings) {
         appState.settings = { ...defaultState.settings, ...parsed.settings };
       }
@@ -91,6 +94,7 @@ function applyIncomingState(incomingState, eventType = 'STATE_SYNC', extraData =
   appState.lastIssuedNumber = incomingState.lastIssuedNumber ?? 0;
   appState.waitingList = Array.isArray(incomingState.waitingList) ? incomingState.waitingList : [];
   appState.completedList = Array.isArray(incomingState.completedList) ? incomingState.completedList : [];
+  appState.activityLogs = Array.isArray(incomingState.activityLogs) ? incomingState.activityLogs : [];
   if (incomingState.settings) {
     appState.settings = { ...appState.settings, ...incomingState.settings };
   }
@@ -106,6 +110,45 @@ function applyIncomingState(incomingState, eventType = 'STATE_SYNC', extraData =
       ...extraData
     });
   }
+}
+
+// 寫入動作紀錄 (每次叫號、取號、完成都會即時寫入一筆 JSON / CSV 紀錄)
+function logActivity(action, number, counter = '', note = '') {
+  const now = new Date();
+  const logItem = {
+    id: 'LOG-' + now.getTime() + '-' + Math.random().toString(36).substring(2, 5),
+    time: getTimeString(now),
+    date: now.toLocaleDateString('zh-TW'),
+    action: action, // "自助取號", "叫號呼叫", "重新叫號", "這號好了(服務完成)", "櫃檯代發號", "系統重置"
+    number: formatNumber(number),
+    counter: counter || appState.settings.counter || '1 號櫃檯',
+    note: note,
+    timestamp: now.getTime()
+  };
+
+  if (!Array.isArray(appState.activityLogs)) {
+    appState.activityLogs = [];
+  }
+  appState.activityLogs.unshift(logItem); // 最新的排最前面
+
+  // 限制紀錄最多保留最近 500 筆，避免 localStorage 過大
+  if (appState.activityLogs.length > 500) {
+    appState.activityLogs.pop();
+  }
+
+  // 若使用者有設定 Google Sheet Webhook，自動背景發送寫入線上 Google 試算表
+  if (appState.settings && appState.settings.webhookUrl) {
+    try {
+      fetch(appState.settings.webhookUrl, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(logItem)
+      }).catch(err => console.warn('Webhook post error', err));
+    } catch (e) {}
+  }
+
+  return logItem;
 }
 
 // 儲存狀態並同步推播至 BroadcastChannel 與 MQTT 雲端
@@ -131,10 +174,10 @@ function saveState(broadcastType = 'STATE_CHANGED', extraData = {}) {
     }
   }
 
-  // 2. 跨裝置雲端推播 (MQTT over WebSocket)
+  // 2. 跨裝置雲端推播 (MQTT over WebSocket) - 啟用 retain: true 讓新開手機立即可讀取最新叫號
   if (mqttClient && mqttClient.connected) {
     try {
-      mqttClient.publish(MQTT_TOPIC, JSON.stringify(payload), { qos: 1 });
+      mqttClient.publish(MQTT_TOPIC, JSON.stringify(payload), { qos: 1, retain: true });
     } catch (e) {
       console.warn('MQTT publish error:', e);
     }

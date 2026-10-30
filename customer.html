@@ -2,136 +2,155 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>現場叫號看板與取號機 | 智慧叫號系統</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>顧客排隊查號中心 | 智慧叫號系統</title>
   <link rel="stylesheet" href="style.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 </head>
-<body class="customer-page">
-  <div class="app-container">
-    <!-- 頂部資訊列 -->
-    <header class="header">
+<body class="customer-mobile-page">
+  <div class="mobile-app-container">
+    <!-- 頂部手機資訊列 -->
+    <header class="mobile-header">
       <div class="brand">
-        <span class="icon">🔔</span>
+        <span class="icon">📱</span>
         <div>
           <div class="brand-title-wrap">
-            <h1>現場叫號大螢幕</h1>
+            <h1>行動排隊查號</h1>
             <span class="cloud-sync-badge local" id="cloudSyncBadge"><span class="dot"></span> 連線中</span>
           </div>
-          <p class="subtitle">Smart Queue Calling & Ticket Display</p>
+          <p class="subtitle">即時同步現場叫號進度</p>
         </div>
       </div>
       <div class="header-controls">
-        <button id="voiceToggleBtn" class="pill-btn active" title="切換語音播報">
-          <span class="icon">🔊</span> 語音：<span id="voiceStatusText">開啟</span>
+        <button id="voiceToggleBtn" class="pill-btn mini-btn active" title="切換手機語音廣播">
+          <span class="icon">🔊</span> <span id="voiceStatusText">語音</span>
         </button>
-        <button id="soundToggleBtn" class="pill-btn active" title="切換叮咚提示音效">
-          <span class="icon">🎵</span> 提示音：<span id="soundStatusText">開啟</span>
+        <button id="soundToggleBtn" class="pill-btn mini-btn active" title="切換手機提示音">
+          <span class="icon">🎵</span> <span id="soundStatusText">音效</span>
         </button>
-        <button id="fullscreenBtn" class="pill-btn" title="切換全螢幕大看板">
-          <span class="icon">⛶</span> 全螢幕
-        </button>
-        <a href="admin.html" class="pill-btn highlight-link" title="進入櫃檯店員管理端">
-          <span class="icon">⚙️</span> 櫃檯管理端 ➔
+        <a href="admin.html" class="pill-btn mini-btn" title="切換至櫃檯管理端">
+          <span class="icon">⚙️</span>
         </a>
       </div>
     </header>
 
-    <!-- 主展示區：叫號看板 + 顧客取號機 -->
-    <main class="main-content">
-      <section class="dashboard-grid">
-        <!-- 叫號看板（大螢幕） -->
-        <div class="card display-card customer-display-card">
-          <div class="card-header">
-            <span class="badge pulse">SERVING NOW</span>
-            <h2>目前叫號</h2>
-            <div class="counter-badge-wrap">
-              <span id="activeCounterBadge" class="counter-pill">1 號櫃檯</span>
-            </div>
-          </div>
+    <main class="mobile-main">
+      <!-- 核心 1：顧客專屬號碼牌卡片 (My Ticket Status) -->
+      <section class="card my-ticket-section" id="myTicketSection">
+        <!-- 未領取號碼時顯示 -->
+        <div id="noTicketBox" class="ticket-entry-box">
+          <div class="ticket-prompt-icon">🎫</div>
+          <h3>尚未領取號碼牌？</h3>
+          <p class="ticket-subprompt">您可以直接線上取號，或輸入已拿到的紙本號碼：</p>
+          
+          <button id="getTicketBtn" class="btn-take-ticket-mobile">
+            <span class="btn-icon">⚡</span>
+            <span class="btn-text">立即線上領取號碼牌</span>
+          </button>
 
-          <div class="display-board">
-            <div class="label-current">CURRENT NUMBER</div>
-            <div class="calling-number-wrap">
-              <span id="currentNumberDisplay" class="calling-number">---</span>
+          <div class="manual-ticket-wrap">
+            <span>或輸入現場紙本號碼：</span>
+            <div class="input-row">
+              <input type="number" id="manualTicketInput" placeholder="例如：5" min="1" max="999">
+              <button id="trackManualTicketBtn" class="pill-btn highlight-link">追蹤此號</button>
             </div>
-            <div class="display-subtext" id="displaySubtext">目前暫無叫號中顧客，請抽取號碼牌</div>
-          </div>
-
-          <div class="customer-board-footer">
-            <span class="footer-tip">📢 聽到叫號語音與「叮咚」聲時，請攜帶號碼牌至指定櫃檯辦理</span>
           </div>
         </div>
 
-        <!-- 顧客取號專區 -->
-        <div class="card ticket-card">
-          <div class="card-header">
-            <span class="badge info">GET TICKET</span>
-            <h2>自助取號區</h2>
-            <span class="live-clock" id="liveClock">00:00:00</span>
+        <!-- 已領取/已追蹤號碼時顯示 -->
+        <div id="hasTicketBox" class="my-ticket-card hidden">
+          <div class="my-ticket-header">
+            <span class="my-ticket-label">您的排隊號碼牌</span>
+            <button id="cancelMyTicketBtn" class="link-cancel-btn" title="取消或更換號碼">更換號碼</button>
           </div>
 
-          <div class="ticket-action-box">
-            <p class="ticket-tip">歡迎光臨！請點擊下方按鈕領取您的號碼牌：</p>
-            <button id="getTicketBtn" class="btn-take-ticket">
-              <span class="btn-icon">🎫</span>
-              <span class="btn-text">按此取號</span>
-              <span class="btn-subtext">CLICK TO TAKE NUMBER</span>
-            </button>
+          <div class="my-ticket-number-wrap">
+            <span class="my-number-text" id="myTicketNumDisplay">---</span>
           </div>
 
-          <!-- 最近取出的號碼提示 -->
-          <div class="last-ticket-preview" id="lastTicketPreview">
-            <div class="ticket-stub">
-              <div class="stub-header">★ 最新發出號碼 ★</div>
-              <div class="stub-number" id="lastTicketNumber">--</div>
-              <div class="stub-time" id="lastTicketTime">今日尚無取號</div>
+          <!-- 即時狀態通知盒 -->
+          <div id="myTicketStatusBox" class="my-status-box waiting-status">
+            <div class="status-indicator-icon" id="myStatusIcon">⏳</div>
+            <div class="status-content">
+              <div class="status-main-title" id="myStatusTitle">排隊等候中</div>
+              <div class="status-desc" id="myStatusDesc">正在為您即時計算等候人數...</div>
             </div>
-            <div class="queue-summary">
-              <div class="stat-item">
-                <span class="stat-label">現場等候人數</span>
-                <span class="stat-val highlight-val" id="waitingCountDisplay">0</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-label">今日已發出</span>
-                <span class="stat-val" id="totalIssuedDisplay">0</span>
-              </div>
+          </div>
+
+          <div class="my-ticket-progress-bar-wrap">
+            <div class="progress-bar-track">
+              <div class="progress-bar-fill" id="myProgressBarFill" style="width: 30%;"></div>
             </div>
           </div>
         </div>
       </section>
 
-      <!-- 現場等候號碼進度（純公開展示看板，防誤觸） -->
-      <section class="queue-section">
+      <!-- 核心 2：現場目前叫號看板 (Now Serving) -->
+      <section class="card display-card mobile-display-card">
+        <div class="card-header">
+          <span class="badge pulse">NOW SERVING</span>
+          <h2>現場叫號看板</h2>
+          <span id="activeCounterBadge" class="counter-pill">1 號櫃檯</span>
+        </div>
+
+        <div class="display-board">
+          <div class="label-current">CURRENT CALLING</div>
+          <div class="calling-number-wrap">
+            <span id="currentNumberDisplay" class="calling-number">---</span>
+          </div>
+          <div class="display-subtext" id="displaySubtext">目前暫無叫號中顧客</div>
+        </div>
+
+        <div class="queue-stats-row">
+          <div class="stat-pill">
+            <span class="stat-p-label">現場等候</span>
+            <span class="stat-p-val" id="waitingCountDisplay">0</span>
+            <span class="stat-p-unit">人</span>
+          </div>
+          <div class="stat-p-divider"></div>
+          <div class="stat-pill">
+            <span class="stat-p-label">今日已發</span>
+            <span class="stat-p-val" id="totalIssuedDisplay">0</span>
+            <span class="stat-p-unit">號</span>
+          </div>
+          <div class="stat-p-divider"></div>
+          <div class="stat-pill">
+            <span class="stat-p-label">現在時間</span>
+            <span class="stat-p-val font-mono" id="liveClock">00:00:00</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 核心 3：現場排隊等候名單 (純唯讀查看) -->
+      <section class="queue-section mobile-queue-section">
         <div class="section-title-bar">
           <div>
-            <h3>📋 現場等候號碼進度</h3>
-            <p class="section-hint">（目前共有 <strong class="highlight-text" id="waitingBadgeCount">0</strong> 位貴賓在等候服務中）</p>
+            <h3>📋 現場等候名單</h3>
+            <p class="section-hint">（共有 <strong class="highlight-text" id="waitingBadgeCount">0</strong> 位在隊列中）</p>
           </div>
         </div>
 
-        <!-- 等候列表容器 -->
         <div id="waitingListContainer" class="queue-list-container">
-          <div class="queue-grid" id="waitingGrid">
-            <!-- 動態產生等候卡片 (純展示) -->
+          <div class="queue-grid mobile-queue-grid" id="waitingGrid">
+            <!-- 動態產生等候卡片 -->
           </div>
           <div id="emptyWaitingNotice" class="empty-notice">
             <div class="empty-icon">🎉</div>
-            <p>目前沒有等候中的號碼！點擊上方「按此取號」即可抽取您的號碼牌。</p>
+            <p>目前現場沒有排隊等候中的號碼！</p>
           </div>
         </div>
       </section>
     </main>
 
-    <!-- 底部版權宣告與資訊 -->
-    <footer class="footer">
-      <p>智慧叫號排隊系統 &copy; <span id="currentYear">2026</span> | 顧客端大螢幕 | 與櫃檯管理端即時連動</p>
+    <!-- 底部資訊 -->
+    <footer class="footer mobile-footer">
+      <p>智慧叫號排隊系統 &copy; <span id="currentYear">2026</span> | 顧客手機即時查號端</p>
     </footer>
   </div>
 
-  <!-- 取號成功彈窗小卡 -->
+  <!-- 取號成功提示小窗 -->
   <div id="ticketModal" class="modal-overlay hidden">
     <div class="modal-card">
       <div class="modal-notch"></div>
@@ -139,7 +158,7 @@
       <p class="modal-desc">您的排隊號碼是</p>
       <div class="modal-number" id="modalTicketNumber">001</div>
       <p class="modal-meta" id="modalTicketMeta">前面還有 0 人在等候</p>
-      <button id="modalCloseBtn" class="modal-btn">確認關閉</button>
+      <button id="modalCloseBtn" class="modal-btn">開始在手機追蹤進度</button>
     </div>
   </div>
 
