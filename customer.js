@@ -23,10 +23,14 @@ const customerElements = {
 
   // 可直接到櫃檯領取清單
   pickupNumbersGrid: document.getElementById('pickupNumbersGrid'),
-  pickupCountBadge: document.getElementById('pickupCountBadge')
+  pickupCountBadge: document.getElementById('pickupCountBadge'),
+
+  // 是否需要到號震動提醒 (是/否)
+  needVibrateSelect: document.getElementById('needVibrateSelect')
 };
 
 const CUSTOMER_SAVED_NUMBER_KEY = 'CUSTOMER_TRACKED_NUMBER_V1';
+const CUSTOMER_NEED_VIBRATE_KEY = 'CUSTOMER_NEED_VIBRATE_V1';
 let lastNotifiedCallNumber = null;
 let lastVibratedKey = null;
 
@@ -37,6 +41,12 @@ function initCustomerView() {
   const savedNum = localStorage.getItem(CUSTOMER_SAVED_NUMBER_KEY);
   if (savedNum && customerElements.myNumberInput) {
     customerElements.myNumberInput.value = savedNum;
+  }
+
+  // 還原是否需要到號震動提醒 (預設為 'yes')
+  const savedVibrate = localStorage.getItem(CUSTOMER_NEED_VIBRATE_KEY);
+  if (savedVibrate && customerElements.needVibrateSelect) {
+    customerElements.needVibrateSelect.value = savedVibrate;
   }
 
   setupCustomerEventListeners();
@@ -90,6 +100,9 @@ function doVibrate(pattern) {
 
 // 檢查是否叫到自己號碼（到號時差 0 人自動震動提醒）
 function checkAndTriggerVibration(calledNum) {
+  const needVibrate = customerElements.needVibrateSelect ? customerElements.needVibrateSelect.value : 'yes';
+  if (needVibrate === 'no') return;
+
   const myNumStr = customerElements.myNumberInput ? customerElements.myNumberInput.value.trim() : '';
   if (!myNumStr || isNaN(myNumStr)) return;
   const myNum = parseInt(myNumStr, 10);
@@ -118,6 +131,7 @@ function updateMyNumberStatus() {
   const subText = customerElements.myResultSubText;
   const clearBtn = customerElements.clearMyNumberBtn;
   const vibrateHint = customerElements.myResultVibrateHint;
+  const needVibrate = customerElements.needVibrateSelect ? customerElements.needVibrateSelect.value : 'yes';
 
   // 即時更新上方可領取號碼清單（若顧客輸入號碼，該號碼牌會同步高亮標示）
   renderPickupReadyNumbers();
@@ -155,7 +169,11 @@ function updateMyNumberStatus() {
     mainText.innerHTML = '🎉 您的號碼已叫號！可直接前往櫃檯領取';
     subText.textContent = `您持有的號碼為 ${formatNumber(myNum)} 號，已叫號完成，請立即至【${appState.settings.counter || '1 號櫃檯'}】領取/辦理！`;
     if (vibrateHint) {
-      vibrateHint.innerHTML = '📳 <strong>已到號，手機已發出震動提醒！</strong>';
+      if (needVibrate === 'no') {
+        vibrateHint.innerHTML = '🔕 已到號（已關閉震動提醒）';
+      } else {
+        vibrateHint.innerHTML = '📳 <strong>已到號，手機已發出震動提醒！</strong>';
+      }
     }
     checkAndTriggerVibration(myNum);
     return;
@@ -198,11 +216,15 @@ function updateMyNumberStatus() {
     subText.textContent = `您是第 ${formatNumber(myNum)} 號，請在櫃檯附近準備！`;
   } else {
     mainText.innerHTML = `⏳ 目前前面還差 <strong style="font-size: 1.6rem; color: #fbbf24; font-family: 'Share Tech Mono', monospace; text-shadow: 0 0 10px rgba(251,191,36,0.3);">${ahead}</strong> 個人`;
-    subText.textContent = `您的號碼牌：${formatNumber(myNum)} 號 ｜ 現場叫至：${cur !== null ? formatNumber(cur) + ' 號' : '待命中'}`;
+    subText.textContent = `您的號碼牌：${formatNumber(myNum)} 號 ｜ 現場叫至：${cur !== null ? formatNumber(cur) + ' 號' : '無叫號'}`;
   }
 
   if (vibrateHint) {
-    vibrateHint.innerHTML = '📳 到號時（差 0 人）手機將自動震動提醒';
+    if (needVibrate === 'no') {
+      vibrateHint.innerHTML = '🔕 已設定為不需到號震動提醒';
+    } else {
+      vibrateHint.innerHTML = '📳 到號時（差 0 人）手機將自動震動提醒';
+    }
   }
 }
 
@@ -244,6 +266,7 @@ function renderCustomerUI() {
     customerElements.currentNumberDisplay.textContent = formatNumber(appState.currentNumber);
     if (customerElements.activeCounterBadge) {
       customerElements.activeCounterBadge.textContent = appState.settings.counter || '1 號櫃檯';
+      customerElements.activeCounterBadge.style.display = 'inline-block';
     }
     if (customerElements.displaySubtext) {
       customerElements.displaySubtext.textContent = `請 ${formatNumber(appState.currentNumber)} 號至 ${appState.settings.counter || '櫃檯'} 辦理`;
@@ -252,7 +275,7 @@ function renderCustomerUI() {
   } else {
     customerElements.currentNumberDisplay.textContent = '---';
     if (customerElements.activeCounterBadge) {
-      customerElements.activeCounterBadge.textContent = '待命中';
+      customerElements.activeCounterBadge.style.display = 'none'; // 絕不顯示待命中
     }
     if (customerElements.displaySubtext) {
       const waitCount = Array.isArray(appState.waitingList) ? appState.waitingList.length : 0;
@@ -263,12 +286,9 @@ function renderCustomerUI() {
     }
   }
 
-  // 統計數字
+  // 統計數字 (僅現場等候)
   if (customerElements.waitingCountDisplay) {
     customerElements.waitingCountDisplay.textContent = Array.isArray(appState.waitingList) ? appState.waitingList.length : 0;
-  }
-  if (customerElements.totalIssuedDisplay) {
-    customerElements.totalIssuedDisplay.textContent = appState.lastIssuedNumber || 0;
   }
 
   // 渲染可至櫃檯領取號碼清單
@@ -290,6 +310,15 @@ function setupCustomerEventListeners() {
     customerElements.clearMyNumberBtn.addEventListener('click', () => {
       customerElements.myNumberInput.value = '';
       localStorage.removeItem(CUSTOMER_SAVED_NUMBER_KEY);
+      lastVibratedKey = null;
+      updateMyNumberStatus();
+    });
+  }
+
+  // 是否需要到號震動提醒切換事件 (是/否)
+  if (customerElements.needVibrateSelect) {
+    customerElements.needVibrateSelect.addEventListener('change', () => {
+      localStorage.setItem(CUSTOMER_NEED_VIBRATE_KEY, customerElements.needVibrateSelect.value);
       lastVibratedKey = null;
       updateMyNumberStatus();
     });

@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>現場叫號看板</title>
-  <link rel="stylesheet" href="style.css?v=3.0">
+  <link rel="stylesheet" href="style.css?v=3.1">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
@@ -21,23 +21,20 @@
         <div>
           <div class="brand-title-wrap">
             <h1>現場叫號看板</h1>
-            <span class="cloud-sync-badge local" id="cloudSyncBadge"><span class="dot"></span> 連線中</span>
           </div>
         </div>
       </div>
     </header>
 
     <main class="mobile-main">
-      <!-- 現場叫號看板 (Now Serving) -->
+      <!-- 現場叫號看板 -->
       <section class="card display-card mobile-display-card">
         <div class="card-header">
-          <span class="badge pulse">NOW SERVING</span>
           <h2>目前叫號</h2>
-          <span id="activeCounterBadge" class="counter-pill">1 號櫃檯</span>
+          <span id="activeCounterBadge" class="counter-pill" style="display: none;">1 號櫃檯</span>
         </div>
 
         <div class="display-board">
-          <div class="label-current">CURRENT CALLING</div>
           <div class="calling-number-wrap">
             <span id="currentNumberDisplay" class="calling-number">---</span>
           </div>
@@ -49,12 +46,6 @@
             <span class="stat-p-label">現場等候</span>
             <span class="stat-p-val" id="waitingCountDisplay">0</span>
             <span class="stat-p-unit">人</span>
-          </div>
-          <div class="stat-p-divider"></div>
-          <div class="stat-pill">
-            <span class="stat-p-label">今日已發</span>
-            <span class="stat-p-val" id="totalIssuedDisplay">0</span>
-            <span class="stat-p-unit">號</span>
           </div>
           <div class="stat-p-divider"></div>
           <div class="stat-pill">
@@ -91,7 +82,18 @@
             <span style="font-size: 1.25rem;">🎫</span>
             <h3 style="font-size: 1.05rem; font-weight: 700; color: #f8fafc; margin: 0;">查詢我的號碼牌進度</h3>
           </div>
-          <span style="font-size: 0.75rem; color: #94a3b8; background: rgba(255,255,255,0.06); padding: 3px 8px; border-radius: 6px;">即時計算</span>
+        </div>
+
+        <!-- 是否需要到號震動提醒 (下拉選單只有是跟否) -->
+        <div style="display: flex; align-items: center; justify-content: space-between; background: rgba(15, 23, 42, 0.55); padding: 10px 14px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.08); margin-bottom: 12px;">
+          <label for="needVibrateSelect" style="font-size: 0.88rem; color: #cbd5e1; font-weight: 600; display: flex; align-items: center; gap: 6px;">
+            <span>📳</span>
+            <span>是否需要到號震動提醒：</span>
+          </label>
+          <select id="needVibrateSelect" style="padding: 6px 14px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.2); background: #1e293b; color: #f8fafc; font-size: 0.88rem; outline: none; cursor: pointer;">
+            <option value="yes" selected>是</option>
+            <option value="no">否</option>
+          </select>
         </div>
 
         <div style="display: flex; gap: 8px; margin-bottom: 12px;">
@@ -115,8 +117,8 @@
     </main>
   </div>
 
-  <script src="config.js?v=3.0"></script>
-  <script src="shared.js?v=3.0"></script>
-  <script src="customer.js?v=3.0"></script>
+  <script src="config.js?v=3.1"></script>
+  <script src="shared.js?v=3.1"></script>
+  <script src="customer.js?v=3.1"></script>
 </body>
 </html>
