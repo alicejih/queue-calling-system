@@ -1,157 +1,181 @@
 /**
- * 智慧叫號系統 - Google 試算表雲端專屬後端 (Google Apps Script)
- * 
- * ========================================================
- * 📋 3 分鐘設定教學 (完全免費、100% 掌握在您的 Google 帳號下)
- * ========================================================
- * 1. 打開 Google 雲端硬碟 (Google Drive)，建立一個新的「Google 試算表」，可命名為「叫號系統資料庫」。
- * 2. 點擊試算表頂部選單的【擴充功能】➔【Apps Script】。
- * 3. 把 Apps Script 編輯器內原本的所有程式碼刪除，將本檔案的內容全部複製貼上。
- * 4. 點擊編輯器右上角藍色【部署】按鈕 ➔ 選擇【新部署】。
- * 5. 點擊左側齒輪 ⚙️「選取類型」➔ 選擇【網頁應用程式 (Web App)】：
- *    - 說明：智慧叫號 API
- *    - 執行身分：選「我」(您的 Google 帳號)
- *    - 誰可以存取：選「任何人 (Anyone)」(讓顧客手機與店員能讀取進度)
- * 6. 點擊【部署】(若彈出權限確認，點進階 ➔ 前往專案 ➔ 允許)。
- * 7. 複製產生的「網頁應用程式網址 (URL)」(格式例如：https://script.google.com/macros/s/.../exec)。
- * 8. 回到管理後台 (admin.html)，點擊【📊 試算表設定】貼上網址即可！
+ * 智慧叫號系統 - Google 試算表專屬後端 (對應「工作區」與「LOG」兩張工作表)
+ * 試算表網址：https://docs.google.com/spreadsheets/d/1ysyfQCF1XrjR5Ps2tfQexaeUi5gdNdy0Xrl6GwD7KJs/edit
  */
 
+const SHEET_WORKSPACE = "工作區";
+const SHEET_LOG = "LOG";
+
+// GET: 供顧客手機與店家後台即時抓取最新叫號號碼與等候隊列
 function doGet(e) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var statusSheet = getOrCreateSheet(ss, "即時狀態");
-  
-  // 讀取狀態
-  var currentNumber = statusSheet.getRange("B2").getValue();
-  var lastIssuedNumber = statusSheet.getRange("B3").getValue();
-  var counter = statusSheet.getRange("B4").getValue();
-  var lastUpdated = statusSheet.getRange("B5").getValue();
-  
-  // 讀取等候清單
-  var waitSheet = getOrCreateSheet(ss, "等候清單");
-  var waitData = waitSheet.getDataRange().getValues();
+  var ws = getOrCreateSheet(ss, SHEET_WORKSPACE);
+  initWorkspaceIfEmpty(ws);
+
+  // 讀取頂部狀態 (第 1 列)
+  var currentNumRaw = ws.getRange("B1").getValue();
+  var currentNumber = currentNumRaw !== "" && !isNaN(currentNumRaw) ? parseInt(currentNumRaw, 10) : null;
+  var counter = ws.getRange("D1").getValue() || "1 號櫃檯";
+  var lastIssuedNumber = parseInt(ws.getRange("F1").getValue(), 10) || 0;
+  var lastUpdated = ws.getRange("H1").getValue() || "";
+
+  // 讀取現場等候清單 (從第 4 列開始)
   var waitingList = [];
-  for (var i = 1; i < waitData.length; i++) {
-    if (waitData[i][0] && waitData[i][1]) {
-      waitingList.push({
-        id: String(waitData[i][0]),
-        number: parseInt(waitData[i][1], 10),
-        time: String(waitData[i][2]),
-        timestamp: Number(waitData[i][3])
-      });
+  var lastRow = ws.getLastRow();
+  if (lastRow >= 4) {
+    var rangeData = ws.getRange(4, 1, lastRow - 3, 5).getValues();
+    for (var i = 0; i < rangeData.length; i++) {
+      var num = rangeData[i][0];
+      var time = rangeData[i][1];
+      var ticketId = rangeData[i][3];
+      var ts = rangeData[i][4] || Date.now();
+      if (num !== "" && !isNaN(num)) {
+        waitingList.push({
+          number: parseInt(num, 10),
+          time: String(time),
+          status: String(rangeData[i][2] || "等候中"),
+          id: String(ticketId || ("T-" + num)),
+          timestamp: Number(ts)
+        });
+      }
     }
   }
-  
+
   var response = {
     status: "success",
-    currentNumber: currentNumber ? parseInt(currentNumber, 10) : null,
-    lastIssuedNumber: parseInt(lastIssuedNumber, 10) || 0,
-    counter: counter ? String(counter) : "1 號櫃檯",
+    currentNumber: currentNumber,
+    lastIssuedNumber: lastIssuedNumber,
+    counter: String(counter),
     lastUpdated: String(lastUpdated),
     waitingList: waitingList
   };
-  
+
   return ContentService.createTextOutput(JSON.stringify(response))
     .setMimeType(ContentService.MimeType.JSON);
 }
 
+// POST: 店員點叫號、完成、或顧客手機抽號時，寫入工作區並自動留存 LOG 紀錄
 function doPost(e) {
   var lock = LockService.getScriptLock();
-  // 最多等待 10 秒鎖定，保證多人同時取號/叫號不會衝突
-  lock.tryLock(10000);
-  
+  lock.tryLock(10000); // 10秒防並發鎖
+
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var statusSheet = getOrCreateSheet(ss, "即時狀態");
-    var waitSheet = getOrCreateSheet(ss, "等候清單");
-    var logSheet = getOrCreateSheet(ss, "叫號歷史紀錄報表(CSV)");
-    
-    // 初始化工作表結構
-    initSheetsIfEmpty(statusSheet, waitSheet, logSheet);
-    
+    var ws = getOrCreateSheet(ss, SHEET_WORKSPACE);
+    var logSheet = getOrCreateSheet(ss, SHEET_LOG);
+
+    initWorkspaceIfEmpty(ws);
+    initLogIfEmpty(logSheet);
+
     var data = JSON.parse(e.postData.contents);
     var action = data.action; 
     var payload = data.payload || {};
     var now = new Date();
     var timeStr = Utilities.formatDate(now, "Asia/Taipei", "HH:mm:ss");
     var dateStr = Utilities.formatDate(now, "Asia/Taipei", "yyyy-MM-dd");
-    
+
     if (action === "CALL_NUMBER") {
-      statusSheet.getRange("B2").setValue(payload.number);
-      if (payload.counter) statusSheet.getRange("B4").setValue(payload.counter);
-      statusSheet.getRange("B5").setValue(dateStr + " " + timeStr);
-      
-      // 寫入 CSV 紀錄
+      // 1. 更新工作區目前叫號
+      ws.getRange("B1").setValue(payload.number);
+      if (payload.counter) ws.getRange("D1").setValue(payload.counter);
+      ws.getRange("H1").setValue(dateStr + " " + timeStr);
+
+      // 更新等候清單中該號碼的狀態為「🔔 叫號中」
+      updateStatusInWaitingList(ws, payload.number, "🔔 叫號中");
+
+      // 2. 寫入 LOG 工作表 (永久留存)
       logSheet.appendRow([dateStr, timeStr, "叫號呼叫", payload.number, payload.counter || "1 號櫃檯", payload.note || "店員叫號"]);
-    } 
+    }
     else if (action === "TAKE_TICKET") {
       var ticket = payload.ticket;
-      statusSheet.getRange("B3").setValue(ticket.number);
-      statusSheet.getRange("B5").setValue(dateStr + " " + timeStr);
-      
-      waitSheet.appendRow([ticket.id, ticket.number, ticket.time, ticket.timestamp]);
-      logSheet.appendRow([dateStr, timeStr, "線上/櫃檯取號", ticket.number, "--", "領取號碼牌"]);
+      // 1. 更新工作區最新流水號
+      ws.getRange("F1").setValue(ticket.number);
+      ws.getRange("H1").setValue(dateStr + " " + timeStr);
+
+      // 2. 在工作區等候清單新增一列
+      var nextRow = Math.max(ws.getLastRow() + 1, 4);
+      ws.getRange(nextRow, 1, 1, 5).setValues([[
+        ticket.number,
+        ticket.time,
+        "⏳ 等候中",
+        ticket.id,
+        ticket.timestamp || now.getTime()
+      ]]);
+
+      // 3. 寫入 LOG 工作表
+      logSheet.appendRow([dateStr, timeStr, "取號抽牌", ticket.number, "--", "領取號碼牌"]);
     }
     else if (action === "COMPLETE_TICKET") {
-      var ticketId = payload.ticketId;
-      var rows = waitSheet.getDataRange().getValues();
-      for (var r = 1; r < rows.length; r++) {
-        if (String(rows[r][0]) === String(ticketId)) {
-          waitSheet.deleteRow(r + 1);
-          break;
-        }
-      }
-      
+      // 1. 從工作區等候清單移除該號碼
+      removeTicketFromWaitingList(ws, payload.ticketId, payload.number);
+
       if (payload.nextNumber !== undefined) {
-        statusSheet.getRange("B2").setValue(payload.nextNumber || "");
+        ws.getRange("B1").setValue(payload.nextNumber || "");
       }
-      statusSheet.getRange("B5").setValue(dateStr + " " + timeStr);
+      ws.getRange("H1").setValue(dateStr + " " + timeStr);
+
+      // 2. 寫入 LOG 工作表
       logSheet.appendRow([dateStr, timeStr, "服務完成(這號好了)", payload.number, payload.counter || "1 號櫃檯", "完成辦理"]);
     }
     else if (action === "RESET") {
-      statusSheet.getRange("B2").setValue("");
-      statusSheet.getRange("B3").setValue(0);
-      statusSheet.getRange("B5").setValue(dateStr + " " + timeStr);
-      
-      // 清空等候清單
-      waitSheet.clear();
-      waitSheet.appendRow(["TicketID", "Number", "Time", "Timestamp"]);
+      // 1. 清空工作區叫號與流水號
+      ws.getRange("B1").setValue("");
+      ws.getRange("F1").setValue(0);
+      ws.getRange("H1").setValue(dateStr + " " + timeStr);
+
+      // 清空等候名單 (保留前 3 列標題)
+      if (ws.getLastRow() >= 4) {
+        ws.getRange(4, 1, ws.getLastRow() - 3, 5).clearContent();
+      }
+
+      // 2. 寫入 LOG 工作表
       logSheet.appendRow([dateStr, timeStr, "系統歸零重置", "--", "--", "清空今日排隊隊列"]);
     }
     else if (action === "SYNC_ALL") {
       var st = payload.state;
       if (st) {
-        statusSheet.getRange("B2").setValue(st.currentNumber || "");
-        statusSheet.getRange("B3").setValue(st.lastIssuedNumber || 0);
-        statusSheet.getRange("B4").setValue(st.settings && st.settings.counter ? st.settings.counter : "1 號櫃檯");
-        statusSheet.getRange("B5").setValue(dateStr + " " + timeStr);
-        
-        waitSheet.clear();
-        waitSheet.appendRow(["TicketID", "Number", "Time", "Timestamp"]);
+        ws.getRange("B1").setValue(st.currentNumber || "");
+        ws.getRange("D1").setValue(st.settings && st.settings.counter ? st.settings.counter : "1 號櫃檯");
+        ws.getRange("F1").setValue(st.lastIssuedNumber || 0);
+        ws.getRange("H1").setValue(dateStr + " " + timeStr);
+
+        if (ws.getLastRow() >= 4) {
+          ws.getRange(4, 1, ws.getLastRow() - 3, 5).clearContent();
+        }
+
         if (st.waitingList && st.waitingList.length > 0) {
+          var rows = [];
           st.waitingList.forEach(function(t) {
-            waitSheet.appendRow([t.id, t.number, t.time, t.timestamp]);
+            rows.push([
+              t.number,
+              t.time,
+              (t.number === st.currentNumber ? "🔔 叫號中" : "⏳ 等候中"),
+              t.id,
+              t.timestamp
+            ]);
           });
+          ws.getRange(4, 1, rows.length, 5).setValues(rows);
         }
       }
     }
-    
-    return ContentService.createTextOutput(JSON.stringify({ 
-      status: "success", 
-      action: action, 
-      timestamp: now.getTime() 
+
+    return ContentService.createTextOutput(JSON.stringify({
+      status: "success",
+      action: action,
+      timestamp: now.getTime()
     })).setMimeType(ContentService.MimeType.JSON);
-      
+
   } catch (err) {
-    return ContentService.createTextOutput(JSON.stringify({ 
-      status: "error", 
-      message: err.toString() 
+    return ContentService.createTextOutput(JSON.stringify({
+      status: "error",
+      message: err.toString()
     })).setMimeType(ContentService.MimeType.JSON);
   } finally {
     lock.releaseLock();
   }
 }
 
+// 輔助函式：取得或建立工作表
 function getOrCreateSheet(ss, name) {
   var sheet = ss.getSheetByName(name);
   if (!sheet) {
@@ -160,18 +184,59 @@ function getOrCreateSheet(ss, name) {
   return sheet;
 }
 
-function initSheetsIfEmpty(statusSheet, waitSheet, logSheet) {
-  if (statusSheet.getLastRow() === 0) {
-    statusSheet.appendRow(["項目", "數值"]);
-    statusSheet.appendRow(["目前叫號 (CurrentNumber)", ""]);
-    statusSheet.appendRow(["今日發號流水號 (LastIssued)", "0"]);
-    statusSheet.appendRow(["當前櫃檯 (Counter)", "1 號櫃檯"]);
-    statusSheet.appendRow(["最後異動時間 (LastUpdated)", ""]);
+// 初始化「工作區」格式與標題列
+function initWorkspaceIfEmpty(ws) {
+  if (ws.getRange("A1").getValue() === "") {
+    // 第 1 列：控制儀表板數值
+    ws.getRange("A1:H1").setValues([[
+      "目前叫號:", "", 
+      "當前櫃檯:", "1 號櫃檯", 
+      "今日發號:", 0, 
+      "最後更新:", Utilities.formatDate(new Date(), "Asia/Taipei", "yyyy-MM-dd HH:mm:ss")
+    ]]);
+    ws.getRange("A1:H1").setFontWeight("bold");
+
+    // 第 3 列：等候清單表頭
+    ws.getRange("A3:E3").setValues([[
+      "排隊號碼", "取號時間", "當前狀態", "票號唯一ID", "時間戳記"
+    ]]);
+    ws.getRange("A3:E3").setBackground("#e2e8f0").setFontWeight("bold");
   }
-  if (waitSheet.getLastRow() === 0) {
-    waitSheet.appendRow(["TicketID", "Number", "Time", "Timestamp"]);
-  }
+}
+
+// 初始化「LOG」工作表表頭
+function initLogIfEmpty(logSheet) {
   if (logSheet.getLastRow() === 0) {
-    logSheet.appendRow(["日期", "時間", "操作動作", "排隊號碼", "櫃檯", "備註說明"]);
+    logSheet.appendRow(["日期", "時間", "操作動作", "排隊號碼", "服務櫃檯", "備註詳細"]);
+    logSheet.getRange("A1:F1").setBackground("#cbd5e1").setFontWeight("bold");
+  }
+}
+
+// 更新等候清單狀態
+function updateStatusInWaitingList(ws, number, newStatus) {
+  var lastRow = ws.getLastRow();
+  if (lastRow < 4) return;
+  var nums = ws.getRange(4, 1, lastRow - 3, 1).getValues();
+  for (var i = 0; i < nums.length; i++) {
+    if (nums[i][0] == number) {
+      ws.getRange(4 + i, 3).setValue(newStatus);
+    } else {
+      if (ws.getRange(4 + i, 3).getValue() === "🔔 叫號中") {
+        ws.getRange(4 + i, 3).setValue("⏳ 等候中");
+      }
+    }
+  }
+}
+
+// 移除已完成的排隊票券
+function removeTicketFromWaitingList(ws, ticketId, number) {
+  var lastRow = ws.getLastRow();
+  if (lastRow < 4) return;
+  var rows = ws.getRange(4, 1, lastRow - 3, 4).getValues();
+  for (var i = 0; i < rows.length; i++) {
+    if ((ticketId && String(rows[i][3]) === String(ticketId)) || (rows[i][0] == number)) {
+      ws.deleteRow(4 + i);
+      break;
+    }
   }
 }
