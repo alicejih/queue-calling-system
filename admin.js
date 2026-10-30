@@ -486,6 +486,10 @@ function setupAdminEventListeners() {
     if (!baseUrl.startsWith('http')) {
       baseUrl = 'https://alicejih.github.io/queue-calling-system/';
     }
+    const workerUrl = getWorkerApiUrl();
+    if (workerUrl) {
+      return `${baseUrl}?worker=${encodeURIComponent(workerUrl)}`;
+    }
     const apiUrl = getSheetApiUrl();
     if (apiUrl) {
       return `${baseUrl}?api=${encodeURIComponent(apiUrl)}`;
@@ -530,15 +534,17 @@ function setupAdminEventListeners() {
     });
   }
 
-  // Google 試算表連線設定彈窗
+  // 雲端連線設定彈窗 (Cloudflare / Google 試算表)
   const openSheetBtn = document.getElementById('openSheetSettingsBtn');
   const sheetModal = document.getElementById('sheetSettingsModal');
   const closeSheetBtn = document.getElementById('closeSheetModalBtn');
   const saveSheetBtn = document.getElementById('saveSheetUrlBtn');
   const sheetInput = document.getElementById('sheetApiUrlInput');
+  const workerInput = document.getElementById('workerApiUrlInput');
 
   if (openSheetBtn && sheetModal) {
     openSheetBtn.addEventListener('click', () => {
+      if (workerInput) workerInput.value = getWorkerApiUrl();
       if (sheetInput) sheetInput.value = getSheetApiUrl();
       sheetModal.classList.remove('hidden');
     });
@@ -553,11 +559,17 @@ function setupAdminEventListeners() {
       if (e.target === sheetModal) sheetModal.classList.add('hidden');
     });
   }
-  if (saveSheetBtn && sheetInput) {
+  if (saveSheetBtn) {
     saveSheetBtn.addEventListener('click', () => {
-      const url = sheetInput.value.trim();
-      setSheetApiUrl(url);
-      alert(url ? '🎉 成功綁定 Google 試算表！系統已啟動雙向自動同步與 CSV 寫入。' : '已清除 Google 試算表網址，切換為本地模式。');
+      const wUrl = workerInput ? workerInput.value.trim() : '';
+      const sUrl = sheetInput ? sheetInput.value.trim() : '';
+      setWorkerApiUrl(wUrl);
+      setSheetApiUrl(sUrl);
+      let msg = '🎉 雲端連線設定已成功更新！';
+      if (wUrl) msg += '\n⚡ Cloudflare Worker 毫秒級極速同步已啟動！';
+      if (sUrl) msg += '\n📊 Google 試算表自動記錄已啟動！';
+      if (!wUrl && !sUrl) msg = '已清除雲端網址，切換為本地模式。';
+      alert(msg);
       if (sheetModal) sheetModal.classList.add('hidden');
       renderAdminUI();
     });

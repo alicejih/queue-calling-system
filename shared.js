@@ -7,6 +7,7 @@
 
 const STORAGE_KEY = 'QUEUE_SYSTEM_DATA_V1';
 const SHEET_API_STORAGE_KEY = 'QUEUE_SHEET_API_URL_V1';
+const WORKER_API_STORAGE_KEY = 'QUEUE_WORKER_API_URL_V1';
 const CHANNEL_NAME = 'QUEUE_SYSTEM_SYNC_CHANNEL';
 
 // 預設狀態
@@ -29,6 +30,7 @@ let broadcastChannel = null;
 let onGlobalSyncCallback = null;
 let lastKnownStateString = '';
 let isFetchingFromSheet = false;
+let isFetchingState = false;
 
 // 初始化廣播通道 (同機分頁即時同步)
 try {
@@ -57,6 +59,31 @@ function calculateWaitDurationText(timestamp) {
   if (mins < 60) return `等候 ${mins} 分鐘`;
   const hours = Math.floor(mins / 60);
   return `等候 ${hours} 時 ${mins % 60} 分`;
+}
+
+// 讀取 Cloudflare Worker 網址 (優先度：1. 網址參數 ?worker= ➔ 2. 全域 config.js ➔ 3. 本地儲存)
+function getWorkerApiUrl() {
+  try {
+    const urlParam = new URLSearchParams(window.location.search).get('worker');
+    if (urlParam) {
+      localStorage.setItem(WORKER_API_STORAGE_KEY, urlParam.trim());
+      return urlParam.trim();
+    }
+  } catch (e) {}
+
+  if (typeof QUEUE_CONFIG !== 'undefined' && QUEUE_CONFIG.cloudflareWorkerUrl) {
+    return QUEUE_CONFIG.cloudflareWorkerUrl.trim();
+  }
+
+  return localStorage.getItem(WORKER_API_STORAGE_KEY) || '';
+}
+
+// 設定 Cloudflare Worker 網址
+function setWorkerApiUrl(url) {
+  const cleanUrl = (url || '').trim();
+  localStorage.setItem(WORKER_API_STORAGE_KEY, cleanUrl);
+  updateSheetSyncStatus();
+  fetchLatestState();
 }
 
 // 讀取 Google 試算表網址 (優先度：1. 網址參數 ?api= ➔ 2. 全域 config.js ➔ 3. 本地儲存)
@@ -170,7 +197,7 @@ function applyIncomingState(incomingState, eventType = 'STATE_SYNC', extraData =
   }
 }
 
-// 儲存狀態並同步推播至 BroadcastChannel 與 Google 試算表
+// 儲存狀態並同步推播至 BroadcastChannel、Cloudflare Worker 與 Google 試算表
 function saveState(broadcastType = 'STATE_CHANGED', extraData = {}) {
   const serialized = JSON.stringify(appState);
   lastKnownStateString = serialized;
@@ -192,8 +219,61 @@ function saveState(broadcastType = 'STATE_CHANGED', extraData = {}) {
     }
   }
 
-  // 2. 同步發送至 Google 試算表 (Google Apps Script Web App)
+  // 2. 同步發送至 Cloudflare Worker (毫秒級雙向同步)
+  postToCloudflareWorker(broadcastType, extraData);
+
+  // 3. 同步發送至 Google 試算表 (備用)
   postToGoogleSheet(broadcastType, extraData);
+}
+
+// 非同步寫入 Cloudflare Worker (全球邊緣極速節點)
+function postToCloudflareWorker(action, extraData = {}) {
+  const workerUrl = getWorkerApiUrl();
+  if (!workerUrl) return;
+
+  let workerAction = 'SYNC_ALL';
+  let workerPayload = { state: appState };
+
+  if (action === 'CALL_NUMBER') {
+    workerAction = 'CALL_NUMBER';
+    workerPayload = {
+      number: extraData.number,
+      counter: extraData.counter || appState.settings.counter
+    };
+  } else if (action === 'TICKET_TAKEN') {
+    workerAction = 'TAKE_TICKET';
+    workerPayload = { ticket: extraData.ticket };
+  } else if (action === 'TICKET_COMPLETED') {
+    workerAction = 'COMPLETE_TICKET';
+    workerPayload = {
+      ticketId: extraData.ticketId,
+      number: extraData.number !== undefined ? extraData.number : appState.currentNumber
+    };
+  } else if (action === 'RESET_ALL') {
+    workerAction = 'RESET';
+    workerPayload = {};
+  }
+
+  try {
+    const endpoint = workerUrl.replace(/\/+$/, '') + '/api/action';
+    fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: workerAction,
+        payload: workerPayload
+      })
+    })
+    .then(res => res.json())
+    .then(res => {
+      if (res && res.status === 'success' && res.data) {
+        applyRemoteData(res.data, 'CLOUDFLARE');
+      }
+    })
+    .catch(err => console.warn('Post to Cloudflare Worker failed:', err));
+  } catch (e) {
+    console.warn('Cloudflare Worker request error:', e);
+  }
 }
 
 // 非同步寫入 Google 試算表
@@ -364,6 +444,11 @@ function parseAndApplyGvizData(json) {
 
 // 套用試算表回傳之資料
 function applySheetData(data) {
+  applyRemoteData(data, 'SHEET');
+}
+
+// 統一套用遠端回傳之資料 (Cloudflare Worker 或 Google 試算表)
+function applyRemoteData(data, source = 'REMOTE') {
   let changed = false;
 
   if (data.currentNumber !== undefined && data.currentNumber !== appState.currentNumber) {
@@ -379,9 +464,8 @@ function applySheetData(data) {
     changed = true;
   }
   if (Array.isArray(data.waitingList)) {
-    // 關鍵防護：若試算表回傳為空，但本機目前有等候名單，絕不可被空的試算表衝掉！
+    // 關鍵防護：若遠端回傳為空，但本機目前有等候名單，絕不可被空的遠端衝掉！
     if (data.waitingList.length === 0 && appState.waitingList.length > 0) {
-      // 只有當試算表發號數大於等於本機，且目前叫號為空（完全重置清空）時才允許清空
       if ((data.lastIssuedNumber || 0) >= appState.lastIssuedNumber && (data.currentNumber === null || data.currentNumber === 0)) {
         appState.waitingList = [];
         changed = true;
@@ -398,7 +482,7 @@ function applySheetData(data) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
     if (onGlobalSyncCallback) {
       onGlobalSyncCallback({
-        type: 'SHEET_SYNC_UPDATE',
+        type: `${source}_SYNC_UPDATE`,
         state: appState,
         number: appState.currentNumber,
         counter: appState.settings.counter
@@ -406,6 +490,31 @@ function applySheetData(data) {
     }
   }
   updateSheetSyncStatus(true);
+}
+
+// 定時向雲端抓取最新資料 (優先使用 Cloudflare Worker，極速 10ms 響應；備用 Google 試算表)
+function fetchLatestState() {
+  const workerUrl = getWorkerApiUrl();
+  if (workerUrl) {
+    if (isFetchingState) return;
+    isFetchingState = true;
+    const endpoint = workerUrl.replace(/\/+$/, '') + '/api/state?_t=' + Date.now();
+    fetch(endpoint)
+      .then(res => res.json())
+      .then(res => {
+        isFetchingState = false;
+        if (res && res.status === 'success' && res.data) {
+          applyRemoteData(res.data, 'CLOUDFLARE');
+        }
+      })
+      .catch(err => {
+        isFetchingState = false;
+        console.warn('Cloudflare fetch error, falling back to sheet if configured:', err);
+        fetchLatestFromSheet();
+      });
+  } else {
+    fetchLatestFromSheet();
+  }
 }
 
 // 設定全域事件監聽
@@ -436,13 +545,13 @@ function listenToSyncEvents(callback) {
         if (onGlobalSyncCallback) onGlobalSyncCallback({ type: 'STORAGE_UPDATE' });
       }
     }
-    if (event.key === SHEET_API_STORAGE_KEY) {
+    if (event.key === SHEET_API_STORAGE_KEY || event.key === WORKER_API_STORAGE_KEY) {
       updateSheetSyncStatus();
-      fetchLatestFromSheet();
+      fetchLatestState();
     }
   });
 
-  // 3. 每 1.2 秒自動向 Google 試算表與本地 storage 抓取最新狀態 (確保跨裝置零時差)
+  // 3. 每 1.2 秒自動向雲端 (Cloudflare / Google 試算表) 與本地 storage 抓取最新狀態 (確保跨裝置零時差)
   setInterval(() => {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw && raw !== lastKnownStateString) {
@@ -452,8 +561,8 @@ function listenToSyncEvents(callback) {
       }
     }
 
-    // 每 1.2 秒自動同步 Google 試算表最新進度
-    fetchLatestFromSheet();
+    // 定時抓取最新進度
+    fetchLatestState();
   }, 1200);
 
   updateSheetSyncStatus();
@@ -464,8 +573,14 @@ function updateSheetSyncStatus(isConnected = null) {
   const badge = document.getElementById('cloudSyncBadge');
   if (!badge) return;
 
-  const url = getSheetApiUrl();
-  if (url) {
+  const workerUrl = getWorkerApiUrl();
+  const sheetUrl = getSheetApiUrl();
+
+  if (workerUrl) {
+    badge.className = 'cloud-sync-badge connected';
+    badge.innerHTML = '<span class="dot" style="background:#10b981;"></span> Cloudflare 極速同步中';
+    badge.title = '已連接 Cloudflare 邊緣節點，全體跨裝置毫秒級雙向同步';
+  } else if (sheetUrl) {
     if (isConnected === false) {
       badge.className = 'cloud-sync-badge local';
       badge.innerHTML = '<span class="dot"></span> 試算表連線中...';
@@ -478,7 +593,7 @@ function updateSheetSyncStatus(isConnected = null) {
   } else {
     badge.className = 'cloud-sync-badge local';
     badge.innerHTML = '<span class="dot"></span> 本地連線中';
-    badge.title = '同台設備雙向即時同步（可至管理端綁定 Google 試算表）';
+    badge.title = '同台設備雙向即時同步（可至管理端綁定 Cloudflare 或 Google 試算表）';
   }
 }
 

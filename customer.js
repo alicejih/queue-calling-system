@@ -62,7 +62,7 @@ function initCustomerView() {
     updateMyNumberStatus();
 
     // 叫號跳動與震動提醒
-    if (event.type === 'CALL_NUMBER' || event.type === 'SHEET_SYNC_UPDATE') {
+    if (event.type === 'CALL_NUMBER' || event.type === 'CLOUDFLARE_SYNC_UPDATE' || event.type === 'SHEET_SYNC_UPDATE' || (event.number !== undefined && event.number !== lastNotifiedCallNumber)) {
       if (event.number !== null && event.number !== undefined && event.number !== lastNotifiedCallNumber) {
         lastNotifiedCallNumber = event.number;
         handleIncomingCallEvent(event.number, event.counter);

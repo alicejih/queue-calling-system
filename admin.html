@@ -47,8 +47,8 @@
         <button id="openCustomerViewBtn" class="pill-btn" title="在新分頁開啟顧客端網頁">
           <span class="icon">🔗</span> 顧客查號頁
         </button>
-        <button id="openSheetSettingsBtn" class="pill-btn" title="綁定個人的 Google 試算表，自動雲端記錄叫號 CSV">
-          <span class="icon">📊</span> 綁定試算表
+        <button id="openSheetSettingsBtn" class="pill-btn" title="設定 Cloudflare 或 Google 試算表雲端即時連線">
+          <span class="icon">☁️</span> 雲端連線設定
         </button>
         <button id="voiceToggleBtn" class="pill-btn active" title="切換後台語音提示">
           <span class="icon">🔊</span> 語音
@@ -175,20 +175,30 @@
     </div>
   </div>
 
-  <!-- Google 試算表連線設定彈窗 -->
+  <!-- 雲端連線設定彈窗 (Cloudflare / Google 試算表) -->
   <div id="sheetSettingsModal" class="modal-overlay hidden">
-    <div class="modal-card" style="max-width: 500px; text-align: left;">
+    <div class="modal-card" style="max-width: 520px; text-align: left;">
       <div class="modal-notch"></div>
-      <h3 style="text-align: center; margin-bottom: 8px;">📊 綁定 Google 試算表</h3>
-      <p class="modal-desc" style="text-align: left; font-size: 0.9rem; line-height: 1.6;">
-        綁定您的 Google 試算表後，每次發號、叫號、完成服務都會<strong>自動即時寫入試算表工作區與 LOG</strong>，跨手機即時同步：
+      <h3 style="text-align: center; margin-bottom: 8px;">☁️ 雲端同步連線設定</h3>
+      <p class="modal-desc" style="text-align: left; font-size: 0.9rem; line-height: 1.6; margin-bottom: 14px;">
+        支援 <strong>Cloudflare Worker（推薦，0 費用、毫秒級雙向同步）</strong> 與 <strong>Google 試算表</strong>：
       </p>
 
-      <div style="margin-bottom: 16px;">
-        <label style="display: block; font-size: 0.85rem; font-weight: 700; color: #1e293b; margin-bottom: 6px;">
-          請貼上 Google Apps Script 網頁應用程式網址：
+      <div style="margin-bottom: 14px; background: #f0fdf4; padding: 12px; border-radius: 8px; border: 1.5px solid #bbf7d0;">
+        <label style="display: block; font-size: 0.88rem; font-weight: 700; color: #166534; margin-bottom: 6px;">
+          ⚡ Cloudflare Worker 網址（首選推薦，零延遲即時同步）：
         </label>
-        <input type="url" id="sheetApiUrlInput" placeholder="https://script.google.com/macros/s/.../exec" style="width: 100%; padding: 10px; border-radius: 8px; border: 1.5px solid #cbd5e1; font-size: 0.85rem; box-sizing: border-box;">
+        <input type="url" id="workerApiUrlInput" placeholder="https://queue-calling.xxxx.workers.dev" style="width: 100%; padding: 10px; border-radius: 8px; border: 1.5px solid #86efac; font-size: 0.85rem; box-sizing: border-box; background: #fff;">
+        <p style="font-size: 0.78rem; color: #15803d; margin-top: 4px; margin-bottom: 0;">
+          💡 部署 Cloudflare Worker 後將網址貼於此處（或直接填在 <code>config.js</code>）。
+        </p>
+      </div>
+
+      <div style="margin-bottom: 16px; background: #f8fafc; padding: 12px; border-radius: 8px; border: 1.5px solid #e2e8f0;">
+        <label style="display: block; font-size: 0.88rem; font-weight: 700; color: #334155; margin-bottom: 6px;">
+          📊 Google Apps Script 網頁應用程式網址（備用）：
+        </label>
+        <input type="url" id="sheetApiUrlInput" placeholder="https://script.google.com/macros/s/.../exec" style="width: 100%; padding: 10px; border-radius: 8px; border: 1.5px solid #cbd5e1; font-size: 0.85rem; box-sizing: border-box; background: #fff;">
       </div>
 
       <div style="display: flex; gap: 8px;">
@@ -198,8 +208,8 @@
     </div>
   </div>
 
-  <script src="config.js?v=3.2"></script>
-  <script src="shared.js?v=3.2"></script>
-  <script src="admin.js?v=3.2"></script>
+  <script src="config.js?v=3.3"></script>
+  <script src="shared.js?v=3.3"></script>
+  <script src="admin.js?v=3.3"></script>
 </body>
 </html>
