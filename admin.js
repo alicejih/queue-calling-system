@@ -267,6 +267,55 @@ function callSpecificWaitingTicket(number) {
   adminCall(number);
 }
 
+// 完成指定號碼牌（店家直接點選此號做好了）
+function adminCompleteSpecificTicket(number) {
+  loadState();
+  getAudioContext();
+
+  const ticketIndex = appState.waitingList.findIndex(t => t.number === number);
+  let completedTicket = null;
+  if (ticketIndex !== -1) {
+    completedTicket = appState.waitingList.splice(ticketIndex, 1)[0];
+  } else {
+    completedTicket = {
+      id: 'T-' + number,
+      number: number,
+      time: getTimeString(),
+      timestamp: Date.now()
+    };
+  }
+
+  if (!Array.isArray(appState.completedList)) {
+    appState.completedList = [];
+  }
+  const now = new Date();
+  appState.completedList.unshift({
+    ...completedTicket,
+    completedTime: getTimeString(now),
+    counter: appState.settings.counter || '1 號櫃檯'
+  });
+
+  logActivity('這號好了(單號完成)', number, appState.settings.counter, `號碼 ${number} 完成辦理/取件`);
+
+  // 若剛好完成的是目前叫號 currentNumber，自動跳下一號
+  if (appState.currentNumber === number) {
+    if (appState.waitingList && appState.waitingList.length > 0) {
+      appState.currentNumber = appState.waitingList[0].number;
+    } else {
+      appState.currentNumber = null;
+    }
+  }
+
+  saveState('TICKET_COMPLETED', {
+    ticketId: completedTicket.id,
+    number: number,
+    nextNumber: appState.currentNumber
+  });
+
+  renderAdminUI();
+  playSuccessChime();
+}
+
 // 渲染管理端介面
 function renderAdminUI() {
   // 目前叫號
@@ -319,8 +368,6 @@ function renderAdminWaitingGrid() {
       const isCalled = ticket.called || isCurrent;
       const card = document.createElement('div');
       card.className = `ticket-item-card ${isCurrent ? 'is-current' : ''}`;
-      card.style.cursor = 'pointer';
-      card.title = '點擊可直接叫此號';
 
       card.innerHTML = `
         <span class="ticket-badge-current" style="${!isCurrent && isCalled ? 'background: #059669; color: #fff;' : ''}">
@@ -331,11 +378,33 @@ function renderAdminWaitingGrid() {
           <span class="item-wait-badge" data-ts="${ticket.timestamp}">${calculateWaitDurationText(ticket.timestamp)}</span>
         </div>
         <div class="item-time-info">取號時間：${ticket.time}</div>
+        <div class="card-actions-row" style="display: flex; gap: 8px; margin-top: 10px;">
+          <button type="button" class="btn-call-this" style="flex: 1; padding: 7px 8px; border-radius: 8px; font-size: 0.85rem; font-weight: 600; cursor: pointer; background: #2563eb; color: #fff; border: none; display: flex; align-items: center; justify-content: center; gap: 4px;">
+            📢 叫此號
+          </button>
+          <button type="button" class="btn-done-this" style="flex: 1.2; padding: 7px 8px; border-radius: 8px; font-size: 0.85rem; font-weight: 700; cursor: pointer; background: #059669; color: #fff; border: none; display: flex; align-items: center; justify-content: center; gap: 4px;">
+            ✅ 這號好了
+          </button>
+        </div>
       `;
 
-      card.addEventListener('click', () => {
-        callSpecificWaitingTicket(ticket.number);
-      });
+      // 點擊「叫此號」
+      const callBtn = card.querySelector('.btn-call-this');
+      if (callBtn) {
+        callBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          adminCall(ticket.number);
+        });
+      }
+
+      // 點擊「這號好了」
+      const doneBtn = card.querySelector('.btn-done-this');
+      if (doneBtn) {
+        doneBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          adminCompleteSpecificTicket(ticket.number);
+        });
+      }
 
       adminElements.waitingGrid.appendChild(card);
     });

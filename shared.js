@@ -379,9 +379,18 @@ function applySheetData(data) {
     changed = true;
   }
   if (Array.isArray(data.waitingList)) {
-    if (JSON.stringify(data.waitingList) !== JSON.stringify(appState.waitingList)) {
-      appState.waitingList = data.waitingList;
-      changed = true;
+    // 關鍵防護：若試算表回傳為空，但本機目前有等候名單，絕不可被空的試算表衝掉！
+    if (data.waitingList.length === 0 && appState.waitingList.length > 0) {
+      // 只有當試算表發號數大於等於本機，且目前叫號為空（完全重置清空）時才允許清空
+      if ((data.lastIssuedNumber || 0) >= appState.lastIssuedNumber && (data.currentNumber === null || data.currentNumber === 0)) {
+        appState.waitingList = [];
+        changed = true;
+      }
+    } else if (data.waitingList.length > 0) {
+      if (JSON.stringify(data.waitingList) !== JSON.stringify(appState.waitingList)) {
+        appState.waitingList = data.waitingList;
+        changed = true;
+      }
     }
   }
 
