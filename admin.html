@@ -62,9 +62,12 @@
         </div>
       </div>
 
-      <!-- 資料報表與備份功能列 (CSV / JSON) -->
+      <!-- 資料報表與備份功能列 (CSV / JSON / Google 試算表) -->
       <div class="admin-data-actions">
-        <button id="exportCsvBtn" class="pill-btn highlight-link" title="匯出今日叫號紀錄為 CSV 試算表（Excel 直接開啟）">
+        <button id="openSheetSettingsBtn" class="pill-btn highlight-link" title="綁定個人的 Google 試算表，自動雲端記錄叫號 CSV">
+          <span class="icon">📊</span> 綁定 Google 試算表
+        </button>
+        <button id="exportCsvBtn" class="pill-btn" title="匯出今日叫號紀錄為 CSV 試算表（Excel 直接開啟）">
           <span class="icon">📥</span> 匯出 CSV 報表
         </button>
         <button id="exportJsonBtn" class="pill-btn" title="將目前所有排隊狀態與紀錄備份為 JSON 檔案">
@@ -217,7 +220,36 @@
     </div>
   </div>
 
-  <script src="https://unpkg.com/mqtt@5.3.5/dist/mqtt.min.js"></script>
+  <!-- Google 試算表連線設定彈窗 -->
+  <div id="sheetSettingsModal" class="modal-overlay hidden">
+    <div class="modal-card" style="max-width: 500px; text-align: left;">
+      <div class="modal-notch"></div>
+      <h3 style="text-align: center; margin-bottom: 8px;">📊 綁定 Google 試算表 (安全雲端)</h3>
+      <p class="modal-desc" style="text-align: left; font-size: 0.9rem; line-height: 1.6;">
+        只要綁定您的個人 Google 試算表，每次點叫號、取號都會<strong>自動即時寫入試算表成為線上 CSV</strong>，並且能安全跨手機即時查號：
+      </p>
+
+      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; margin: 12px 0; font-size: 0.82rem; color: #334155;">
+        <strong>📋 快速 3 步驟設定：</strong><br>
+        1. 建立一個 Google 試算表 ➔ 點選「擴充功能」➔「Apps Script」<br>
+        2. 將專案中的 <code>google_apps_script.js</code> 內容覆蓋貼上<br>
+        3. 點「部署」➔「新部署」➔「網頁應用程式 (所有人可存取)」➔ 複製網址
+      </div>
+
+      <div style="margin-bottom: 16px;">
+        <label style="display: block; font-size: 0.85rem; font-weight: 700; color: #1e293b; margin-bottom: 6px;">
+          請貼上 Google Apps Script 網頁應用程式網址：
+        </label>
+        <input type="url" id="sheetApiUrlInput" placeholder="https://script.google.com/macros/s/.../exec" style="width: 100%; padding: 10px; border-radius: 8px; border: 1.5px solid #cbd5e1; font-size: 0.85rem; box-sizing: border-box;">
+      </div>
+
+      <div style="display: flex; gap: 8px;">
+        <button id="saveSheetUrlBtn" class="modal-btn" style="flex: 2; background: #2563eb;">💾 儲存並啟用連線</button>
+        <button id="closeSheetModalBtn" class="modal-btn" style="flex: 1; background: #64748b;">關閉</button>
+      </div>
+    </div>
+  </div>
+
   <script src="shared.js"></script>
   <script src="admin.js"></script>
 </body>

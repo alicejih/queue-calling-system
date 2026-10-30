@@ -532,6 +532,39 @@ function setupAdminEventListeners() {
     });
   }
 
+  // Google 試算表連線設定彈窗
+  const openSheetBtn = document.getElementById('openSheetSettingsBtn');
+  const sheetModal = document.getElementById('sheetSettingsModal');
+  const closeSheetBtn = document.getElementById('closeSheetModalBtn');
+  const saveSheetBtn = document.getElementById('saveSheetUrlBtn');
+  const sheetInput = document.getElementById('sheetApiUrlInput');
+
+  if (openSheetBtn && sheetModal) {
+    openSheetBtn.addEventListener('click', () => {
+      if (sheetInput) sheetInput.value = getSheetApiUrl();
+      sheetModal.classList.remove('hidden');
+    });
+  }
+  if (closeSheetBtn && sheetModal) {
+    closeSheetBtn.addEventListener('click', () => {
+      sheetModal.classList.add('hidden');
+    });
+  }
+  if (sheetModal) {
+    sheetModal.addEventListener('click', (e) => {
+      if (e.target === sheetModal) sheetModal.classList.add('hidden');
+    });
+  }
+  if (saveSheetBtn && sheetInput) {
+    saveSheetBtn.addEventListener('click', () => {
+      const url = sheetInput.value.trim();
+      setSheetApiUrl(url);
+      alert(url ? '🎉 成功綁定 Google 試算表！系統已啟動雙向自動同步與 CSV 寫入。' : '已清除 Google 試算表網址，切換為本地模式。');
+      if (sheetModal) sheetModal.classList.add('hidden');
+      renderAdminUI();
+    });
+  }
+
   // 打開顧客端網頁
   if (adminElements.openCustomerViewBtn) {
     adminElements.openCustomerViewBtn.addEventListener('click', () => {

@@ -1,18 +1,13 @@
 /**
- * 智慧叫號排隊系統 - 共用核心通訊與狀態模組 (Shared Core Module)
- * 支援三重即時同步保障：
- * 1. BroadcastChannel（同設備不同分頁 0ms 即時廣播）
- * 2. LocalStorage StorageEvent + 輪詢（本地持久化與分頁監聽）
- * 3. 雲端 WebSocket MQTT（跨手機、平板、電腦全球即時雙向連動）
+ * 智慧叫號排隊系統 - 共用核心通訊與狀態模組 (Google 試算表專屬架構)
+ * 1. 支援 Google 試算表 (Google Sheets / Google Apps Script) 作為全自動線上資料庫與 CSV 報表
+ * 2. 支援 BroadcastChannel 與 LocalStorage (同機同瀏覽器 0ms 即時同步)
+ * 3. 100% 掌握在自己的 Google 帳號下，高安全性、高隱私性、永久免費
  */
 
 const STORAGE_KEY = 'QUEUE_SYSTEM_DATA_V1';
+const SHEET_API_STORAGE_KEY = 'QUEUE_SHEET_API_URL_V1';
 const CHANNEL_NAME = 'QUEUE_SYSTEM_SYNC_CHANNEL';
-const MQTT_BROKER_URL = 'wss://broker.emqx.io:8084/mqtt';
-const MQTT_TOPIC = 'alicejih/queue_calling_system_2026/events';
-
-// 產生每個視窗專屬 Client ID，防止自己重複處理自己送出的雲端廣播
-const CLIENT_ID = 'client_' + Math.random().toString(36).substring(2, 9);
 
 // 預設狀態
 const defaultState = {
@@ -20,22 +15,22 @@ const defaultState = {
   lastIssuedNumber: 0,
   waitingList: [],
   completedList: [],
-  activityLogs: [], // 每一次叫號、取號、完成都會自動寫入這裡！
+  activityLogs: [],
   settings: {
     voiceEnabled: true,
     soundEnabled: true,
     counter: '1 號櫃檯',
-    webhookUrl: '' // 可選的 Google Sheet Webhook，點叫號時自動同步寫入線上 Google 試算表！
+    sheetApiUrl: '' // Google 試算表 Web App 網址
   }
 };
 
 let appState = JSON.parse(JSON.stringify(defaultState));
 let broadcastChannel = null;
-let mqttClient = null;
 let onGlobalSyncCallback = null;
 let lastKnownStateString = '';
+let isFetchingFromSheet = false;
 
-// 初始化廣播通道
+// 初始化廣播通道 (同機分頁即時同步)
 try {
   if (typeof BroadcastChannel !== 'undefined') {
     broadcastChannel = new BroadcastChannel(CHANNEL_NAME);
@@ -64,6 +59,22 @@ function calculateWaitDurationText(timestamp) {
   return `等候 ${hours} 時 ${mins % 60} 分`;
 }
 
+// 讀取 Google 試算表網址
+function getSheetApiUrl() {
+  return localStorage.getItem(SHEET_API_STORAGE_KEY) || appState.settings.sheetApiUrl || '';
+}
+
+// 設定 Google 試算表網址
+function setSheetApiUrl(url) {
+  const cleanUrl = (url || '').trim();
+  localStorage.setItem(SHEET_API_STORAGE_KEY, cleanUrl);
+  appState.settings.sheetApiUrl = cleanUrl;
+  saveState('SETTINGS_UPDATED');
+  updateSheetSyncStatus();
+  // 立即從試算表抓取一次最新資料
+  fetchLatestFromSheet();
+}
+
 // 載入本地狀態
 function loadState() {
   const cached = localStorage.getItem(STORAGE_KEY);
@@ -83,6 +94,13 @@ function loadState() {
       console.error('Failed to load state from localStorage', e);
     }
   }
+
+  // 試算表網址獨立讀取
+  const sheetUrl = localStorage.getItem(SHEET_API_STORAGE_KEY);
+  if (sheetUrl) {
+    appState.settings.sheetApiUrl = sheetUrl;
+  }
+
   return appState;
 }
 
@@ -94,7 +112,9 @@ function applyIncomingState(incomingState, eventType = 'STATE_SYNC', extraData =
   appState.lastIssuedNumber = incomingState.lastIssuedNumber ?? 0;
   appState.waitingList = Array.isArray(incomingState.waitingList) ? incomingState.waitingList : [];
   appState.completedList = Array.isArray(incomingState.completedList) ? incomingState.completedList : [];
-  appState.activityLogs = Array.isArray(incomingState.activityLogs) ? incomingState.activityLogs : [];
+  if (Array.isArray(incomingState.activityLogs)) {
+    appState.activityLogs = incomingState.activityLogs;
+  }
   if (incomingState.settings) {
     appState.settings = { ...appState.settings, ...incomingState.settings };
   }
@@ -112,60 +132,20 @@ function applyIncomingState(incomingState, eventType = 'STATE_SYNC', extraData =
   }
 }
 
-// 寫入動作紀錄 (每次叫號、取號、完成都會即時寫入一筆 JSON / CSV 紀錄)
-function logActivity(action, number, counter = '', note = '') {
-  const now = new Date();
-  const logItem = {
-    id: 'LOG-' + now.getTime() + '-' + Math.random().toString(36).substring(2, 5),
-    time: getTimeString(now),
-    date: now.toLocaleDateString('zh-TW'),
-    action: action, // "自助取號", "叫號呼叫", "重新叫號", "這號好了(服務完成)", "櫃檯代發號", "系統重置"
-    number: formatNumber(number),
-    counter: counter || appState.settings.counter || '1 號櫃檯',
-    note: note,
-    timestamp: now.getTime()
-  };
-
-  if (!Array.isArray(appState.activityLogs)) {
-    appState.activityLogs = [];
-  }
-  appState.activityLogs.unshift(logItem); // 最新的排最前面
-
-  // 限制紀錄最多保留最近 500 筆，避免 localStorage 過大
-  if (appState.activityLogs.length > 500) {
-    appState.activityLogs.pop();
-  }
-
-  // 若使用者有設定 Google Sheet Webhook，自動背景發送寫入線上 Google 試算表
-  if (appState.settings && appState.settings.webhookUrl) {
-    try {
-      fetch(appState.settings.webhookUrl, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(logItem)
-      }).catch(err => console.warn('Webhook post error', err));
-    } catch (e) {}
-  }
-
-  return logItem;
-}
-
-// 儲存狀態並同步推播至 BroadcastChannel 與 MQTT 雲端
+// 儲存狀態並同步推播至 BroadcastChannel 與 Google 試算表
 function saveState(broadcastType = 'STATE_CHANGED', extraData = {}) {
   const serialized = JSON.stringify(appState);
   lastKnownStateString = serialized;
   localStorage.setItem(STORAGE_KEY, serialized);
 
   const payload = {
-    senderId: CLIENT_ID,
     type: broadcastType,
     state: appState,
     timestamp: Date.now(),
     ...extraData
   };
 
-  // 1. 同機同瀏覽器廣播 (BroadcastChannel)
+  // 1. 同機廣播 (BroadcastChannel)
   if (broadcastChannel) {
     try {
       broadcastChannel.postMessage(payload);
@@ -174,26 +154,117 @@ function saveState(broadcastType = 'STATE_CHANGED', extraData = {}) {
     }
   }
 
-  // 2. 跨裝置雲端推播 (MQTT over WebSocket) - 啟用 retain: true 讓新開手機立即可讀取最新叫號
-  if (mqttClient && mqttClient.connected) {
-    try {
-      mqttClient.publish(MQTT_TOPIC, JSON.stringify(payload), { qos: 1, retain: true });
-    } catch (e) {
-      console.warn('MQTT publish error:', e);
-    }
+  // 2. 同步發送至 Google 試算表 (Google Apps Script Web App)
+  postToGoogleSheet(broadcastType, extraData);
+}
+
+// 非同步寫入 Google 試算表
+function postToGoogleSheet(action, extraData = {}) {
+  const apiUrl = getSheetApiUrl();
+  if (!apiUrl) return;
+
+  let sheetAction = 'SYNC_ALL';
+  let sheetPayload = { state: appState };
+
+  if (action === 'CALL_NUMBER') {
+    sheetAction = 'CALL_NUMBER';
+    sheetPayload = {
+      number: extraData.number,
+      counter: extraData.counter || appState.settings.counter,
+      note: '櫃檯叫號'
+    };
+  } else if (action === 'TICKET_TAKEN') {
+    sheetAction = 'TAKE_TICKET';
+    sheetPayload = { ticket: extraData.ticket };
+  } else if (action === 'TICKET_COMPLETED') {
+    sheetAction = 'COMPLETE_TICKET';
+    sheetPayload = {
+      ticketId: extraData.ticketId,
+      number: appState.currentNumber,
+      counter: appState.settings.counter
+    };
+  } else if (action === 'RESET_ALL') {
+    sheetAction = 'RESET';
+    sheetPayload = {};
+  }
+
+  try {
+    fetch(apiUrl, {
+      method: 'POST',
+      mode: 'no-cors', // 繞過 Google Apps Script 重定向 CORS 限制
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: sheetAction,
+        payload: sheetPayload
+      })
+    }).catch(err => console.warn('Post to Google Sheet failed:', err));
+  } catch (e) {
+    console.warn('Google Sheet request error:', e);
   }
 }
 
-// 設定全域監聽器（BroadcastChannel, StorageEvent, Polling, MQTT）
+// 定時從 Google 試算表抓取最新資料 (支援顧客手機自動跨裝置同步)
+function fetchLatestFromSheet() {
+  const apiUrl = getSheetApiUrl();
+  if (!apiUrl || isFetchingFromSheet) return;
+
+  isFetchingFromSheet = true;
+  fetch(apiUrl)
+    .then(res => res.json())
+    .then(data => {
+      isFetchingFromSheet = false;
+      if (data && data.status === 'success') {
+        let changed = false;
+
+        if (data.currentNumber !== undefined && data.currentNumber !== appState.currentNumber) {
+          appState.currentNumber = data.currentNumber;
+          changed = true;
+        }
+        if (data.lastIssuedNumber !== undefined && data.lastIssuedNumber > appState.lastIssuedNumber) {
+          appState.lastIssuedNumber = data.lastIssuedNumber;
+          changed = true;
+        }
+        if (data.counter && data.counter !== appState.settings.counter) {
+          appState.settings.counter = data.counter;
+          changed = true;
+        }
+        if (Array.isArray(data.waitingList)) {
+          // 比對清單是否有變化
+          if (JSON.stringify(data.waitingList) !== JSON.stringify(appState.waitingList)) {
+            appState.waitingList = data.waitingList;
+            changed = true;
+          }
+        }
+
+        if (changed) {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
+          if (onGlobalSyncCallback) {
+            onGlobalSyncCallback({
+              type: 'SHEET_SYNC_UPDATE',
+              state: appState,
+              number: appState.currentNumber,
+              counter: appState.settings.counter
+            });
+          }
+        }
+        updateSheetSyncStatus(true);
+      }
+    })
+    .catch(err => {
+      isFetchingFromSheet = false;
+      console.warn('Fetch from Google Sheet failed', err);
+      updateSheetSyncStatus(false);
+    });
+}
+
+// 設定全域事件監聽
 function listenToSyncEvents(callback) {
   onGlobalSyncCallback = callback;
 
-  // 1. 監聽 BroadcastChannel
+  // 1. BroadcastChannel 監聽 (同機分頁)
   if (broadcastChannel) {
     broadcastChannel.onmessage = (event) => {
       const data = event.data;
-      if (data && data.senderId === CLIENT_ID) return; // 忽略自己發的
-
       if (data && data.state) {
         applyIncomingState(data.state, data.type, data);
       } else {
@@ -203,7 +274,7 @@ function listenToSyncEvents(callback) {
     };
   }
 
-  // 2. 監聽 LocalStorage 跨分頁 StorageEvent
+  // 2. StorageEvent 監聽
   window.addEventListener('storage', (event) => {
     if (event.key === STORAGE_KEY && event.newValue) {
       try {
@@ -214,9 +285,13 @@ function listenToSyncEvents(callback) {
         if (onGlobalSyncCallback) onGlobalSyncCallback({ type: 'STORAGE_UPDATE' });
       }
     }
+    if (event.key === SHEET_API_STORAGE_KEY) {
+      updateSheetSyncStatus();
+      fetchLatestFromSheet();
+    }
   });
 
-  // 3. 備援輪詢（每 1.5 秒檢查一次 localStorage 是否有被其他頁籤修改）
+  // 3. 備援輪詢（本地 storage 與 Google 試算表定時抓取）
   setInterval(() => {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw && raw !== lastKnownStateString) {
@@ -225,94 +300,63 @@ function listenToSyncEvents(callback) {
         onGlobalSyncCallback({ type: 'POLL_SYNC', state: appState });
       }
     }
-  }, 1500);
 
-  // 4. 啟動跨裝置 MQTT 雲端連線
-  setupMqttConnection();
-}
+    // 若有設定 Google 試算表，每 3 秒自動與試算表雙向同步
+    if (getSheetApiUrl()) {
+      fetchLatestFromSheet();
+    }
+  }, 3000);
 
-// 建立 MQTT 跨設備連線
-function setupMqttConnection() {
-  if (typeof mqtt === 'undefined') {
-    console.info('MQTT library not loaded yet; relying on local broadcast.');
-    return;
-  }
-
-  try {
-    mqttClient = mqtt.connect(MQTT_BROKER_URL, {
-      clientId: CLIENT_ID,
-      clean: true,
-      connectTimeout: 5000,
-      reconnectPeriod: 3000
-    });
-
-    mqttClient.on('connect', () => {
-      console.log('🟢 MQTT 跨裝置同步已連線');
-      updateCloudSyncStatus(true);
-      mqttClient.subscribe(MQTT_TOPIC, { qos: 1 }, (err) => {
-        if (!err) {
-          // 向其他在線設備請求最新狀態
-          mqttClient.publish(MQTT_TOPIC, JSON.stringify({
-            senderId: CLIENT_ID,
-            type: 'REQUEST_LATEST_STATE'
-          }));
-        }
-      });
-    });
-
-    mqttClient.on('message', (topic, message) => {
-      try {
-        const data = JSON.parse(message.toString());
-        if (data.senderId === CLIENT_ID) return; // 忽略自己發布的訊息
-
-        // 其他裝置剛進來要求最新狀態 -> 若我們手上有資料就回應給他
-        if (data.type === 'REQUEST_LATEST_STATE') {
-          if (appState.lastIssuedNumber > 0 || appState.waitingList.length > 0) {
-            mqttClient.publish(MQTT_TOPIC, JSON.stringify({
-              senderId: CLIENT_ID,
-              type: 'STATE_SYNC',
-              state: appState
-            }));
-          }
-          return;
-        }
-
-        // 收到其他裝置的狀態更新
-        if (data.state) {
-          applyIncomingState(data.state, data.type, data);
-        }
-      } catch (e) {
-        console.warn('MQTT message parse error', e);
-      }
-    });
-
-    mqttClient.on('error', () => {
-      updateCloudSyncStatus(false);
-    });
-
-    mqttClient.on('offline', () => {
-      updateCloudSyncStatus(false);
-    });
-  } catch (err) {
-    console.warn('Failed to initialize MQTT client', err);
-    updateCloudSyncStatus(false);
-  }
+  updateSheetSyncStatus();
 }
 
 // 更新畫面上的同步狀態燈
-function updateCloudSyncStatus(isConnected) {
+function updateSheetSyncStatus(isConnected = null) {
   const badge = document.getElementById('cloudSyncBadge');
-  if (badge) {
-    if (isConnected) {
-      badge.className = 'cloud-sync-badge connected';
-      badge.innerHTML = '<span class="dot"></span> 跨裝置同步中';
-      badge.title = '已連線雲端：手機與電腦隨時雙向即時同步';
-    } else {
+  if (!badge) return;
+
+  const url = getSheetApiUrl();
+  if (url) {
+    if (isConnected === false) {
       badge.className = 'cloud-sync-badge local';
-      badge.innerHTML = '<span class="dot"></span> 本地連線中';
-      badge.title = '同台設備雙向即時同步';
+      badge.innerHTML = '<span class="dot"></span> 試算表連線中...';
+      badge.title = '正在連線至 Google 試算表';
+    } else {
+      badge.className = 'cloud-sync-badge connected';
+      badge.innerHTML = '<span class="dot"></span> Google 試算表同步中';
+      badge.title = '已綁定您的專屬 Google 試算表，資料 100% 安全儲存於您的雲端硬碟';
     }
+  } else {
+    badge.className = 'cloud-sync-badge local';
+    badge.innerHTML = '<span class="dot"></span> 本地連線中';
+    badge.title = '同台設備雙向即時同步（可至管理端綁定 Google 試算表）';
   }
+}
+
+// 寫入動作紀錄 (寫入本機歷史紀錄，同時準備匯出)
+function logActivity(action, number, counter = '', note = '') {
+  const now = new Date();
+  const logItem = {
+    id: 'LOG-' + now.getTime() + '-' + Math.random().toString(36).substring(2, 5),
+    time: getTimeString(now),
+    date: now.toLocaleDateString('zh-TW'),
+    action: action,
+    number: formatNumber(number),
+    counter: counter || appState.settings.counter || '1 號櫃檯',
+    note: note,
+    timestamp: now.getTime()
+  };
+
+  if (!Array.isArray(appState.activityLogs)) {
+    appState.activityLogs = [];
+  }
+  appState.activityLogs.unshift(logItem);
+
+  if (appState.activityLogs.length > 500) {
+    appState.activityLogs.pop();
+  }
+
+  return logItem;
 }
 
 /* ============================
@@ -369,7 +413,7 @@ function playDingDong(force = false) {
   }
 }
 
-// 完成提示音
+// 完成音
 function playSuccessChime() {
   if (!appState.settings.soundEnabled) return;
   try {
@@ -390,7 +434,7 @@ function playSuccessChime() {
   } catch (err) {}
 }
 
-// 真人語音朗讀
+// 真人中文語音朗讀
 function speakCall(number, counter, force = false) {
   if (!force && !appState.settings.voiceEnabled) return;
   if (!('speechSynthesis' in window)) return;

@@ -78,9 +78,12 @@ function initCustomerView() {
   listenToSyncEvents((event) => {
     renderCustomerUI();
 
-    // 如果輪到這隻手機的號碼，或正在叫號
-    if (event.type === 'CALL_NUMBER') {
-      handleIncomingCallEvent(event.number, event.counter);
+    // 如果輪到這隻手機的號碼，或正在叫號 (支援本地與 Google 試算表同步)
+    if (event.type === 'CALL_NUMBER' || event.type === 'SHEET_SYNC_UPDATE') {
+      if (event.number !== null && event.number !== undefined && event.number !== lastNotifiedCallNumber) {
+        lastNotifiedCallNumber = event.number;
+        handleIncomingCallEvent(event.number, event.counter);
+      }
     }
   });
 }
