@@ -36,7 +36,13 @@ const adminElements = {
   soundStatusText: document.getElementById('soundStatusText'),
   openCustomerViewBtn: document.getElementById('openCustomerViewBtn'),
   resetAllBtn: document.getElementById('resetAllBtn'),
-  currentYear: document.getElementById('currentYear')
+  currentYear: document.getElementById('currentYear'),
+
+  // 匯出/匯入按鈕
+  exportCsvBtn: document.getElementById('exportCsvBtn'),
+  exportJsonBtn: document.getElementById('exportJsonBtn'),
+  importJsonBtn: document.getElementById('importJsonBtn'),
+  jsonFileInput: document.getElementById('jsonFileInput')
 };
 
 function initAdminView() {
@@ -55,7 +61,7 @@ function initAdminView() {
     adminElements.currentYear.textContent = new Date().getFullYear();
   }
 
-  // 監聽顧客端或其他視窗更新
+  // 監聽顧客端或其他視窗更新 (包含跨裝置 MQTT 雲端連線)
   listenToSyncEvents((event) => {
     renderAdminUI();
   });
@@ -73,6 +79,7 @@ function updateDurations() {
 
 // 叫指定號碼
 function adminCall(number) {
+  loadState(); // 確保讀取最新狀態
   getAudioContext();
   appState.currentNumber = number;
   const currentCounter = appState.settings.counter || '1 號櫃檯';
@@ -84,13 +91,14 @@ function adminCall(number) {
 
   renderAdminUI();
 
-  // 本地也播放
+  // 本地播放音效與語音
   playDingDong();
   speakCall(number, currentCounter);
 }
 
 // 叫下一號
 function adminCallNext() {
+  loadState(); // 確保讀取最新清單
   if (appState.waitingList.length === 0) {
     alert('目前沒有等候中的號碼！可點擊上方「櫃檯代客發號」。');
     return;
@@ -115,6 +123,7 @@ function adminCallNext() {
 
 // 上一號
 function adminCallPrev() {
+  loadState();
   if (appState.waitingList.length === 0) return;
   const currentIndex = appState.waitingList.findIndex(t => t.number === appState.currentNumber);
   if (currentIndex > 0) {
@@ -126,6 +135,7 @@ function adminCallPrev() {
 
 // 重新叫號
 function adminRepeatCall() {
+  loadState();
   if (appState.currentNumber === null) {
     if (appState.waitingList.length > 0) {
       adminCall(appState.waitingList[0].number);
@@ -139,6 +149,7 @@ function adminRepeatCall() {
 
 // 櫃檯代客發號
 function adminIssueTicket() {
+  loadState(); // 確保流水號最新
   getAudioContext();
   appState.lastIssuedNumber += 1;
   const currentNum = appState.lastIssuedNumber;
@@ -160,6 +171,7 @@ function adminIssueTicket() {
 
 // 核心功能 3：點擊列表號碼代表這一號好了！
 function markTicketCompleted(ticketId) {
+  loadState(); // 確保以最新狀態操作
   const index = appState.waitingList.findIndex(t => t.id === ticketId);
   if (index === -1) return;
 
@@ -172,7 +184,8 @@ function markTicketCompleted(ticketId) {
   appState.completedList.unshift({
     ...ticket,
     completedTime: getTimeString(now),
-    duration: durationMinutes
+    duration: durationMinutes,
+    counter: appState.settings.counter || '1 號櫃檯'
   });
 
   playSuccessChime();
@@ -196,6 +209,7 @@ function markTicketCompleted(ticketId) {
 
 // 誤按復原
 function undoCompleted(ticketId) {
+  loadState();
   const idx = appState.completedList.findIndex(t => t.id === ticketId);
   if (idx === -1) return;
   const item = appState.completedList.splice(idx, 1)[0];
@@ -209,6 +223,89 @@ function undoCompleted(ticketId) {
   appState.waitingList.sort((a, b) => a.number - b.number);
   saveState('TICKET_RESTORED');
   renderAdminUI();
+}
+
+// 匯出 CSV 試算表報表 (Excel 可直接開)
+function exportToCSV() {
+  loadState();
+  const allRecords = [
+    ...appState.completedList.map(t => ({
+      number: formatNumber(t.number),
+      time: t.time,
+      completedTime: t.completedTime,
+      duration: `${t.duration} 分鐘`,
+      status: '已完成服務',
+      counter: t.counter || appState.settings.counter || '1 號櫃檯'
+    })),
+    ...appState.waitingList.map(t => ({
+      number: formatNumber(t.number),
+      time: t.time,
+      completedTime: '--',
+      duration: calculateWaitDurationText(t.timestamp),
+      status: (t.number === appState.currentNumber) ? '叫號中' : '等候中',
+      counter: (t.number === appState.currentNumber) ? (appState.settings.counter || '1 號櫃檯') : '--'
+    }))
+  ];
+
+  if (allRecords.length === 0) {
+    alert('今日尚無任何叫號或取號紀錄可供匯出！');
+    return;
+  }
+
+  // 加上 UTF-8 BOM (\uFEFF) 讓 Excel 打開不會亂碼
+  let csvContent = '\uFEFF排隊號碼,取號時間,完成時間,等候歷時,服務狀態,服務櫃檯\n';
+  allRecords.forEach(r => {
+    csvContent += `"${r.number}","${r.time}","${r.completedTime}","${r.duration}","${r.status}","${r.counter}"\n`;
+  });
+
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const dateStr = new Date().toISOString().split('T')[0];
+  a.href = url;
+  a.download = `叫號服務紀錄報表_${dateStr}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// 匯出 JSON 完整資料
+function exportToJSON() {
+  loadState();
+  const jsonStr = JSON.stringify(appState, null, 2);
+  const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const dateStr = new Date().toISOString().split('T')[0];
+  a.href = url;
+  a.download = `queue_backup_${dateStr}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// 匯入 JSON 備份
+function importFromJSON(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const parsed = JSON.parse(e.target.result);
+      if (parsed && Array.isArray(parsed.waitingList)) {
+        applyIncomingState(parsed, 'RESTORE_BACKUP');
+        saveState('RESTORE_BACKUP');
+        alert('🎉 成功匯入並還原叫號排隊紀錄！');
+        renderAdminUI();
+      } else {
+        alert('檔案格式不符，請確認是有效的叫號備份 JSON 檔案。');
+      }
+    } catch (err) {
+      alert('讀取 JSON 檔案失敗：' + err.message);
+    }
+  };
+  reader.readAsText(file);
 }
 
 // 渲染管理端介面
@@ -381,9 +478,28 @@ function setupAdminEventListeners() {
     });
   }
 
+  // 匯出 CSV 與 JSON
+  if (adminElements.exportCsvBtn) {
+    adminElements.exportCsvBtn.addEventListener('click', exportToCSV);
+  }
+  if (adminElements.exportJsonBtn) {
+    adminElements.exportJsonBtn.addEventListener('click', exportToJSON);
+  }
+  if (adminElements.importJsonBtn && adminElements.jsonFileInput) {
+    adminElements.importJsonBtn.addEventListener('click', () => {
+      adminElements.jsonFileInput.click();
+    });
+    adminElements.jsonFileInput.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files[0]) {
+        importFromJSON(e.target.files[0]);
+        e.target.value = ''; // 重置 input
+      }
+    });
+  }
+
   // 重置歸零
   adminElements.resetAllBtn.addEventListener('click', () => {
-    if (confirm('確定要清空今天所有號碼與排隊紀錄並歸零嗎？此動作將同步清除現場大螢幕！')) {
+    if (confirm('確定要清空今天所有號碼與排隊紀錄並歸零嗎？此動作將同步清除現場大螢幕！建議清空前可先點「📥 匯出 CSV」留存紀錄。')) {
       appState.currentNumber = null;
       appState.lastIssuedNumber = 0;
       appState.waitingList = [];

@@ -92,6 +92,7 @@ function triggerCallingEffect(number, counter) {
 
 // 顧客取號動作
 function handleCustomerTakeTicket() {
+  loadState(); // 確保讀取最新發號流水號與等候名單
   getAudioContext(); // 解鎖瀏覽器音效限制
 
   appState.lastIssuedNumber += 1;

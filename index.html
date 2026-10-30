@@ -16,7 +16,10 @@
       <div class="brand">
         <span class="icon">🔔</span>
         <div>
-          <h1>現場叫號大螢幕</h1>
+          <div class="brand-title-wrap">
+            <h1>現場叫號大螢幕</h1>
+            <span class="cloud-sync-badge local" id="cloudSyncBadge"><span class="dot"></span> 連線中</span>
+          </div>
           <p class="subtitle">Smart Queue Calling & Ticket Display</p>
         </div>
       </div>
@@ -140,6 +143,7 @@
     </div>
   </div>
 
+  <script src="https://unpkg.com/mqtt@5.3.5/dist/mqtt.min.js"></script>
   <script src="shared.js"></script>
   <script src="customer.js"></script>
 </body>

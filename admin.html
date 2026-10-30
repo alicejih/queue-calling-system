@@ -16,7 +16,10 @@
       <div class="brand">
         <span class="icon admin-icon">⚙️</span>
         <div>
-          <h1>櫃檯管理控制台</h1>
+          <div class="brand-title-wrap">
+            <h1>櫃檯管理控制台</h1>
+            <span class="cloud-sync-badge local" id="cloudSyncBadge"><span class="dot"></span> 連線中</span>
+          </div>
           <p class="subtitle">Operator & Admin Console</p>
         </div>
       </div>
@@ -36,22 +39,38 @@
       </div>
     </header>
 
-    <!-- 頂部即時統計卡片列 -->
-    <section class="admin-stats-bar">
-      <div class="stat-badge-card waiting-stat">
-        <span class="stat-badge-title">等候辦理</span>
-        <span class="stat-badge-num" id="adminWaitingTotal">0</span>
-        <span class="stat-badge-unit">人</span>
+    <!-- 頂部即時統計與資料存檔列 -->
+    <section class="admin-top-toolbar">
+      <div class="admin-stats-bar">
+        <div class="stat-badge-card waiting-stat">
+          <span class="stat-badge-title">等候辦理</span>
+          <span class="stat-badge-num" id="adminWaitingTotal">0</span>
+          <span class="stat-badge-unit">人</span>
+        </div>
+        <div class="stat-badge-card issued-stat">
+          <span class="stat-badge-title">今日累計發號</span>
+          <span class="stat-badge-num" id="adminIssuedTotal">0</span>
+          <span class="stat-badge-unit">張</span>
+        </div>
+        <div class="stat-badge-card completed-stat">
+          <span class="stat-badge-title">已完成服務</span>
+          <span class="stat-badge-num" id="adminCompletedTotal">0</span>
+          <span class="stat-badge-unit">人</span>
+        </div>
       </div>
-      <div class="stat-badge-card issued-stat">
-        <span class="stat-badge-title">今日累計發號</span>
-        <span class="stat-badge-num" id="adminIssuedTotal">0</span>
-        <span class="stat-badge-unit">張</span>
-      </div>
-      <div class="stat-badge-card completed-stat">
-        <span class="stat-badge-title">已完成服務</span>
-        <span class="stat-badge-num" id="adminCompletedTotal">0</span>
-        <span class="stat-badge-unit">人</span>
+
+      <!-- 資料報表與備份功能列 (CSV / JSON) -->
+      <div class="admin-data-actions">
+        <button id="exportCsvBtn" class="pill-btn highlight-link" title="匯出今日叫號紀錄為 CSV 試算表（Excel 直接開啟）">
+          <span class="icon">📥</span> 匯出 CSV 報表
+        </button>
+        <button id="exportJsonBtn" class="pill-btn" title="將目前所有排隊狀態與紀錄備份為 JSON 檔案">
+          <span class="icon">💾</span> 備份 JSON
+        </button>
+        <button id="importJsonBtn" class="pill-btn" title="從先前備份的 JSON 檔案還原叫號排隊狀態">
+          <span class="icon">📤</span> 還原 JSON
+        </button>
+        <input type="file" id="jsonFileInput" accept=".json" style="display:none">
       </div>
     </section>
 
@@ -133,6 +152,7 @@
                   <th>取號時間</th>
                   <th>完成時間</th>
                   <th>等候歷時</th>
+                  <th>服務櫃檯</th>
                   <th>操作</th>
                 </tr>
               </thead>
@@ -150,10 +170,11 @@
 
     <!-- 底部資訊 -->
     <footer class="footer">
-      <p>智慧叫號排隊系統 &copy; <span id="currentYear">2026</span> | 櫃檯管理端 | 即時雙向連動顧客大看板</p>
+      <p>智慧叫號排隊系統 &copy; <span id="currentYear">2026</span> | 櫃檯管理端 | 即時雙向連動現場大看板</p>
     </footer>
   </div>
 
+  <script src="https://unpkg.com/mqtt@5.3.5/dist/mqtt.min.js"></script>
   <script src="shared.js"></script>
   <script src="admin.js"></script>
 </body>
