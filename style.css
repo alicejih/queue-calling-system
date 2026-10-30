@@ -797,3 +797,237 @@ body {
   color: var(--text-muted);
   border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
+
+/* =======================================================
+ * 分離顧客端與管理端專屬樣式 (Customer & Admin Separate Styles)
+ * ======================================================= */
+
+/* 亮色突顯按鈕與連結 */
+.highlight-link {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8) !important;
+  color: #ffffff !important;
+  border-color: #3b82f6 !important;
+  text-decoration: none;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4);
+}
+
+.highlight-link:hover {
+  background: linear-gradient(135deg, #1d4ed8, #1e40af) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.6);
+}
+
+/* 櫃檯徽章 */
+.counter-badge-wrap {
+  display: flex;
+  align-items: center;
+}
+
+.counter-pill {
+  background: rgba(37, 99, 235, 0.25);
+  border: 1px solid rgba(59, 130, 246, 0.5);
+  color: #93c5fd;
+  font-size: 0.95rem;
+  font-weight: 700;
+  padding: 4px 14px;
+  border-radius: 9999px;
+  letter-spacing: 0.5px;
+}
+
+.customer-board-footer {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.1);
+  text-align: center;
+}
+
+.footer-tip {
+  font-size: 0.88rem;
+  color: #94a3b8;
+  letter-spacing: 0.3px;
+}
+
+/* 顧客端唯讀卡片 */
+.ticket-item-card.customer-view {
+  cursor: default;
+  transform: none !important;
+}
+
+.ticket-item-card.customer-view:hover {
+  border-color: var(--card-border);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+}
+
+.ticket-item-card.customer-view.is-current {
+  border-color: #3b82f6;
+  box-shadow: 0 0 20px rgba(37, 99, 235, 0.35);
+}
+
+.customer-card-status {
+  margin-top: 10px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #60a5fa;
+  text-align: center;
+  padding: 6px;
+  background: rgba(37, 99, 235, 0.1);
+  border-radius: 8px;
+}
+
+.ticket-item-card.customer-view.is-current .customer-card-status {
+  color: #34d399;
+  background: rgba(16, 185, 129, 0.15);
+  animation: pulse 1.5s infinite;
+}
+
+/* 管理端頂部數據條 */
+.admin-stats-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.stat-badge-card {
+  background: var(--card-bg);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  padding: 16px 20px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-badge-card::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 5px;
+}
+
+.stat-badge-card.waiting-stat::before { background: #3b82f6; }
+.stat-badge-card.issued-stat::before { background: #f59e0b; }
+.stat-badge-card.completed-stat::before { background: #10b981; }
+
+.stat-badge-title {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-weight: 500;
+  flex: 1;
+}
+
+.stat-badge-num {
+  font-family: var(--font-digital);
+  font-size: 2.2rem;
+  font-weight: 900;
+  color: #ffffff;
+}
+
+.stat-badge-unit {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+/* 管理端叫號操作台 */
+.admin-calling-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-calling-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  align-items: center;
+  padding: 24px 0 10px;
+}
+
+@media (max-width: 800px) {
+  .admin-calling-body {
+    grid-template-columns: 1fr;
+  }
+}
+
+.admin-num-box {
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 24px;
+  text-align: center;
+}
+
+.admin-status-text {
+  margin-top: 10px;
+  font-size: 0.95rem;
+  color: var(--text-muted);
+}
+
+.admin-status-text.active {
+  color: #60a5fa;
+  font-weight: 600;
+}
+
+.admin-actions-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.action-btn.call-next-accent {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 1.1rem;
+}
+
+.action-btn.call-next-accent:hover {
+  background: linear-gradient(135deg, #059669, #047857);
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.5);
+}
+
+.action-btn.info-action {
+  background: rgba(37, 99, 235, 0.15);
+  border: 1px solid rgba(37, 99, 235, 0.4);
+  color: #93c5fd;
+}
+
+.action-btn.info-action:hover {
+  background: rgba(37, 99, 235, 0.3);
+  color: #ffffff;
+}
+
+/* 管理端等候卡片操作按鈕 */
+.admin-card-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.call-this-btn {
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #fbbf24;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.call-this-btn:hover {
+  background: #f59e0b;
+  color: #0f172a;
+}
+
+.ticket-item-card.admin-interactive {
+  cursor: pointer;
+}
+
+.ticket-item-card.admin-interactive:hover {
+  border-color: rgba(16, 185, 129, 0.5);
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.2);
+}

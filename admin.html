@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>櫃檯管理後台 | 智慧叫號排隊系統</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+</head>
+<body class="admin-page">
+  <div class="app-container">
+    <!-- 頂部資訊與導航列 -->
+    <header class="header admin-header">
+      <div class="brand">
+        <span class="icon admin-icon">⚙️</span>
+        <div>
+          <h1>櫃檯管理控制台</h1>
+          <p class="subtitle">Operator & Admin Console</p>
+        </div>
+      </div>
+      <div class="header-controls">
+        <button id="openCustomerViewBtn" class="pill-btn highlight-link" title="在新分頁開啟現場顧客大看板">
+          <span class="icon">🖥️</span> 現場顧客大看板
+        </button>
+        <button id="voiceToggleBtn" class="pill-btn active" title="切換後台語音提示">
+          <span class="icon">🔊</span> 語音：<span id="voiceStatusText">開啟</span>
+        </button>
+        <button id="soundToggleBtn" class="pill-btn active" title="切換後台提示音效">
+          <span class="icon">🎵</span> 提示音：<span id="soundStatusText">開啟</span>
+        </button>
+        <button id="resetAllBtn" class="pill-btn danger" title="重置今天所有叫號與取號數據">
+          <span class="icon">🔄</span> 今日歸零
+        </button>
+      </div>
+    </header>
+
+    <!-- 頂部即時統計卡片列 -->
+    <section class="admin-stats-bar">
+      <div class="stat-badge-card waiting-stat">
+        <span class="stat-badge-title">等候辦理</span>
+        <span class="stat-badge-num" id="adminWaitingTotal">0</span>
+        <span class="stat-badge-unit">人</span>
+      </div>
+      <div class="stat-badge-card issued-stat">
+        <span class="stat-badge-title">今日累計發號</span>
+        <span class="stat-badge-num" id="adminIssuedTotal">0</span>
+        <span class="stat-badge-unit">張</span>
+      </div>
+      <div class="stat-badge-card completed-stat">
+        <span class="stat-badge-title">已完成服務</span>
+        <span class="stat-badge-num" id="adminCompletedTotal">0</span>
+        <span class="stat-badge-unit">人</span>
+      </div>
+    </section>
+
+    <!-- 叫號控制主面板 -->
+    <main class="main-content">
+      <section class="card admin-calling-card">
+        <div class="card-header">
+          <span class="badge pulse">CALLING CONTROL</span>
+          <h2>叫號操作控制台</h2>
+          <div class="counter-select-wrap">
+            <label for="adminCounterSelect">當前櫃檯：</label>
+            <select id="adminCounterSelect">
+              <option value="1 號櫃檯">1 號櫃檯</option>
+              <option value="2 號櫃檯">2 號櫃檯</option>
+              <option value="3 號櫃檯">3 號櫃檯</option>
+              <option value="快速取餐口">快速取餐口</option>
+              <option value="VIP 服務專櫃">VIP 服務專櫃</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="admin-calling-body">
+          <div class="admin-num-box">
+            <div class="label-current">CURRENT CALLING</div>
+            <div class="calling-number-wrap">
+              <span id="adminCurrentNumber" class="calling-number">---</span>
+            </div>
+            <div id="adminStatusSummary" class="admin-status-text">目前暫無叫號中顧客</div>
+          </div>
+
+          <div class="admin-actions-grid">
+            <button id="adminCallPrevBtn" class="action-btn secondary" title="呼叫上一號">
+              ⏮ 上一號
+            </button>
+            <button id="adminRepeatCallBtn" class="action-btn repeat" title="重新廣播當前號碼">
+              📢 重新叫號
+            </button>
+            <button id="adminCallNextBtn" class="action-btn primary call-next-accent" title="呼叫下一位等候顧客">
+              ⏭ 叫下一號
+            </button>
+            <button id="adminIssueTicketBtn" class="action-btn info-action" title="櫃檯直接代客抽號碼牌">
+              🎫 櫃檯代客發號
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 核心 3: 列表按下去代表這一號好了（等候與處理清單管理） -->
+      <section class="queue-section">
+        <div class="section-title-bar">
+          <div>
+            <h3>📋 隊列處理管理</h3>
+            <p class="section-hint">💡 操作提示：點擊等候卡片上的「<strong class="highlight-text">✅ 這號好了</strong>」或直接點選卡片，即代表該號完成並自動歸檔！</p>
+          </div>
+          <div class="filter-tabs">
+            <button class="tab-btn active" data-tab="waiting">等候中 (<span id="tabWaitingCount">0</span>)</button>
+            <button class="tab-btn" data-tab="completed">已完成 (<span id="tabCompletedCount">0</span>)</button>
+          </div>
+        </div>
+
+        <!-- 等候列表容器 -->
+        <div id="waitingListContainer" class="queue-list-container">
+          <div class="queue-grid" id="adminWaitingGrid">
+            <!-- 動態產生等候卡片 -->
+          </div>
+          <div id="adminEmptyWaitingNotice" class="empty-notice">
+            <div class="empty-icon">🎉</div>
+            <p>目前沒有等候中的號碼！點擊上方「櫃檯代客發號」或等候顧客在看板取號。</p>
+          </div>
+        </div>
+
+        <!-- 已完成列表容器 -->
+        <div id="completedListContainer" class="queue-list-container hidden">
+          <div class="completed-table-wrap">
+            <table class="completed-table">
+              <thead>
+                <tr>
+                  <th>號碼</th>
+                  <th>取號時間</th>
+                  <th>完成時間</th>
+                  <th>等候歷時</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="adminCompletedTableBody">
+                <!-- 動態注入已完成項目 -->
+              </tbody>
+            </table>
+            <div id="adminEmptyCompletedNotice" class="empty-notice">
+              <p>尚無已完成的號碼記錄。</p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- 底部資訊 -->
+    <footer class="footer">
+      <p>智慧叫號排隊系統 &copy; <span id="currentYear">2026</span> | 櫃檯管理端 | 即時雙向連動顧客大看板</p>
+    </footer>
+  </div>
+
+  <script src="shared.js"></script>
+  <script src="admin.js"></script>
+</body>
+</html>
