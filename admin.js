@@ -349,7 +349,96 @@ function renderAdminUI() {
 
   // 渲染現場等候名單
   renderAdminWaitingGrid();
+
+  // 若「已完成服務」彈窗正開啟中，同步更新其清單
+  const completedModal = document.getElementById('completedModal');
+  if (completedModal && !completedModal.classList.contains('hidden')) {
+    renderCompletedModalList();
+  }
 }
+
+// 渲染「已完成服務（這號好了）」名單彈窗內容
+function renderCompletedModalList() {
+  const container = document.getElementById('completedListContainer');
+  const badge = document.getElementById('completedModalBadge');
+  if (!container) return;
+
+  const list = Array.isArray(appState.completedList) ? appState.completedList : [];
+  if (badge) {
+    badge.textContent = `共 ${list.length} 筆`;
+  }
+
+  if (list.length === 0) {
+    container.innerHTML = `
+      <div style="text-align: center; padding: 36px 16px; color: #94a3b8;">
+        <div style="font-size: 2.5rem; margin-bottom: 8px;">📋</div>
+        <p style="margin: 0; font-size: 1rem; font-weight: 600; color: #64748b;">目前尚無已完成的號碼紀錄</p>
+        <p style="margin: 6px 0 0; font-size: 0.82rem; color: #94a3b8;">在控制台點擊「3. 這號好了」或卡片上的「✅ 這號好了」後，紀錄都會即時顯示在此處。</p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = list.map(item => {
+    const numStr = formatNumber(item.number);
+    const counterStr = item.counter || '1 號櫃檯';
+    const compTime = item.completedTime || (item.completedAt ? getTimeString(new Date(item.completedAt)) : '已完成');
+    const takeTime = item.time ? `取號 ${item.time}` : '';
+    const timeDetail = [takeTime, `完成 ${compTime}`].filter(Boolean).join(' ➔ ');
+
+    return `
+      <div class="completed-item-card" style="display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 10px; padding: 10px 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <span style="font-size: 1.3rem; font-weight: 900; font-family: monospace; color: #059669; background: #ecfdf5; padding: 4px 10px; border-radius: 6px; border: 1.5px solid #a7f3d0;">
+            ${numStr}
+          </span>
+          <div>
+            <div style="font-size: 0.88rem; font-weight: 700; color: #1e293b;">
+              ${counterStr}
+            </div>
+            <div style="font-size: 0.78rem; color: #64748b; margin-top: 2px;">
+              ${timeDetail || '完成時間: ' + compTime}
+            </div>
+          </div>
+        </div>
+        <button onclick="adminRestoreTicket(${item.number})" style="font-size: 0.8rem; padding: 6px 12px; background: #ffffff; border: 1.5px solid #cbd5e1; color: #475569; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.15s; display: flex; align-items: center; gap: 4px;" onmouseover="this.style.borderColor='#3b82f6';this.style.color='#2563eb';this.style.background='#eff6ff';" onmouseout="this.style.borderColor='#cbd5e1';this.style.color='#475569';this.style.background='#ffffff';" title="若誤按這號好了，可點擊恢復回等候清單">
+          ↩️ 恢復為等候中
+        </button>
+      </div>
+    `;
+  }).join('');
+}
+
+// 將已完成服務的號碼恢復回等候清單
+function adminRestoreTicket(targetNum) {
+  if (!confirm(`確定要將 ${formatNumber(targetNum)} 號從已完成名單中移回「等候中」嗎？`)) return;
+
+  const idx = appState.completedList.findIndex(t => t.number === targetNum);
+  if (idx !== -1) {
+    const [ticket] = appState.completedList.splice(idx, 1);
+    if (!Array.isArray(appState.waitingList)) appState.waitingList = [];
+
+    // 檢查是否已在等候名單中
+    if (!appState.waitingList.some(t => t.number === targetNum)) {
+      appState.waitingList.push({
+        id: ticket.id || ('T-' + targetNum),
+        number: targetNum,
+        time: ticket.time || getTimeString(),
+        status: '等候中',
+        called: false,
+        timestamp: ticket.timestamp || Date.now()
+      });
+      // 依號碼排序
+      appState.waitingList.sort((a, b) => a.number - b.number);
+    }
+
+    logActivity('恢復等候', targetNum, appState.settings.counter, '從已完成恢復為等候中');
+    saveState('TICKET_RESTORED', { number: targetNum });
+    renderAdminUI();
+    renderCompletedModalList();
+  }
+}
+window.adminRestoreTicket = adminRestoreTicket;
 
 // 渲染等候隊列卡片
 function renderAdminWaitingGrid() {
@@ -572,6 +661,28 @@ function setupAdminEventListeners() {
       alert(msg);
       if (sheetModal) sheetModal.classList.add('hidden');
       renderAdminUI();
+    });
+  }
+
+  // 已完成服務名單彈窗
+  const openCompletedBtn = document.getElementById('openCompletedListBtn');
+  const completedModal = document.getElementById('completedModal');
+  const closeCompletedBtn = document.getElementById('closeCompletedModalBtn');
+
+  if (openCompletedBtn && completedModal) {
+    openCompletedBtn.addEventListener('click', () => {
+      renderCompletedModalList();
+      completedModal.classList.remove('hidden');
+    });
+  }
+  if (closeCompletedBtn && completedModal) {
+    closeCompletedBtn.addEventListener('click', () => {
+      completedModal.classList.add('hidden');
+    });
+  }
+  if (completedModal) {
+    completedModal.addEventListener('click', (e) => {
+      if (e.target === completedModal) completedModal.classList.add('hidden');
     });
   }
 
