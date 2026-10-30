@@ -10,6 +10,24 @@
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 </head>
 <body class="admin-page">
+  <!-- 管理員密碼驗證鎖定層 (防止顧客誤入後台) -->
+  <div id="adminAuthOverlay" class="modal-overlay">
+    <div class="modal-card" style="max-width: 360px; text-align: center;">
+      <div class="modal-notch"></div>
+      <div style="font-size: 3rem; margin-bottom: 8px;">🔒</div>
+      <h3 style="margin-bottom: 4px;">櫃檯管理後台驗證</h3>
+      <p class="modal-desc" style="font-size: 0.88rem; margin-bottom: 16px;">
+        本頁面僅供店員與管理者使用，請輸入管理 PIN 碼：
+      </p>
+      <input type="password" id="adminPinInput" placeholder="請輸入管理密碼 (預設 8888)" style="width: 100%; padding: 12px; font-size: 1.1rem; text-align: center; border-radius: 10px; border: 1.5px solid #cbd5e1; margin-bottom: 14px; letter-spacing: 3px; box-sizing: border-box;">
+      <div id="adminPinError" style="color: #ef4444; font-size: 0.85rem; margin-bottom: 10px; display: none;">密碼錯誤，請重新輸入！</div>
+      <button id="adminLoginBtn" class="modal-btn" style="background: #2563eb; width: 100%;">解鎖進入後台</button>
+      <div style="margin-top: 14px;">
+        <a href="index.html" style="color: #64748b; font-size: 0.82rem; text-decoration: underline;">返回顧客手機查號頁面</a>
+      </div>
+    </div>
+  </div>
+
   <div class="app-container">
     <!-- 頂部資訊與導航列 -->
     <header class="header admin-header">

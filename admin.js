@@ -50,7 +50,52 @@ const adminElements = {
   jsonFileInput: document.getElementById('jsonFileInput')
 };
 
+const ADMIN_PIN_KEY = 'ADMIN_PIN_CODE_V1';
+const ADMIN_AUTH_KEY = 'ADMIN_SESSION_AUTH_OK';
+
+function setupAdminAuth() {
+  const overlay = document.getElementById('adminAuthOverlay');
+  const pinInput = document.getElementById('adminPinInput');
+  const loginBtn = document.getElementById('adminLoginBtn');
+  const errorMsg = document.getElementById('adminPinError');
+
+  // 若本階段已通過驗證
+  if (sessionStorage.getItem(ADMIN_AUTH_KEY) === 'true') {
+    if (overlay) overlay.classList.add('hidden');
+    return;
+  }
+
+  function verifyPin() {
+    const entered = (pinInput ? pinInput.value : '').trim();
+    const correctPin = localStorage.getItem(ADMIN_PIN_KEY) || '8888';
+
+    if (entered === correctPin) {
+      sessionStorage.setItem(ADMIN_AUTH_KEY, 'true');
+      if (overlay) overlay.classList.add('hidden');
+      if (errorMsg) errorMsg.style.display = 'none';
+    } else {
+      if (errorMsg) {
+        errorMsg.style.display = 'block';
+        errorMsg.textContent = 'PIN 碼錯誤！請重新輸入';
+      }
+      if (pinInput) {
+        pinInput.value = '';
+        pinInput.focus();
+      }
+    }
+  }
+
+  if (loginBtn) loginBtn.addEventListener('click', verifyPin);
+  if (pinInput) {
+    pinInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') verifyPin();
+    });
+    setTimeout(() => pinInput.focus(), 300);
+  }
+}
+
 function initAdminView() {
+  setupAdminAuth();
   loadState();
   setupAdminEventListeners();
   setInterval(updateDurations, 30000);
