@@ -125,7 +125,7 @@ function adminCall(number) {
   speakCall(number, currentCounter);
 }
 
-// ★ 核心功能 1：發號碼
+// ★ 核心功能 1：發號碼牌
 function adminIssueTicket() {
   loadState();
   getAudioContext();
@@ -144,7 +144,7 @@ function adminIssueTicket() {
     appState.waitingList = [];
   }
   appState.waitingList.push(ticket);
-  logActivity('發號碼', currentNum, appState.settings.counter, '發放新號碼牌');
+  logActivity('發號碼牌', currentNum, appState.settings.counter, '發放新號碼牌');
   saveState('TICKET_TAKEN', { ticket });
 
   // 若目前無叫號中顧客，直接自動叫出此號！
@@ -163,7 +163,7 @@ function adminRepeatCall() {
     if (appState.waitingList && appState.waitingList.length > 0) {
       adminCall(appState.waitingList[0].number);
     } else {
-      alert('目前尚無叫號中的號碼！請先點擊「1. 發號碼」。');
+      alert('目前尚無叫號中的號碼！請先點擊「1. 發號碼牌」。');
     }
     return;
   }
@@ -185,7 +185,7 @@ function adminCompleteAndNext() {
       adminCall(nextTicket.number);
       return;
     } else {
-      alert('目前暫無叫號中顧客！點擊「1. 發號碼」即可發出新號碼。');
+      alert('目前暫無叫號中顧客！點擊「1. 發號碼牌」即可發出新號碼。');
       return;
     }
   }

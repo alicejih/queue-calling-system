@@ -1,6 +1,6 @@
 /**
  * 智慧叫號排隊系統 - 顧客手機查號專屬邏輯 (Live Customer Calling Board)
- * 專為顧客在手機隨時查閱現場叫號進度、輸入自己號碼即時計算差幾人設計
+ * 專為顧客在手機隨時查閱現場叫號進度、輸入自己號碼即時計算差幾人設計（無音效與語音干擾）
  */
 
 const customerElements = {
@@ -18,13 +18,7 @@ const customerElements = {
   clearMyNumberBtn: document.getElementById('clearMyNumberBtn'),
   myResultBox: document.getElementById('myResultBox'),
   myResultMainText: document.getElementById('myResultMainText'),
-  myResultSubText: document.getElementById('myResultSubText'),
-
-  // 頂部控制項 (語音與音效開關)
-  voiceToggleBtn: document.getElementById('voiceToggleBtn'),
-  voiceStatusText: document.getElementById('voiceStatusText'),
-  soundToggleBtn: document.getElementById('soundToggleBtn'),
-  soundStatusText: document.getElementById('soundStatusText')
+  myResultSubText: document.getElementById('myResultSubText')
 };
 
 const CUSTOMER_SAVED_NUMBER_KEY = 'CUSTOMER_TRACKED_NUMBER_V1';
@@ -45,14 +39,13 @@ function initCustomerView() {
 
   renderCustomerUI();
   updateMyNumberStatus();
-  updateAudioControlsUI();
 
   // 監聽來自店家櫃檯後台的即時叫號操作 (支援本地、Google 試算表即時雙向連線)
   listenToSyncEvents((event) => {
     renderCustomerUI();
     updateMyNumberStatus();
 
-    // 叫號跳動與提示廣播
+    // 叫號跳動與震動提示
     if (event.type === 'CALL_NUMBER' || event.type === 'SHEET_SYNC_UPDATE') {
       if (event.number !== null && event.number !== undefined && event.number !== lastNotifiedCallNumber) {
         lastNotifiedCallNumber = event.number;
@@ -68,7 +61,7 @@ function updateClock() {
   }
 }
 
-// 收到叫號事件時的顧客端處理
+// 收到叫號事件時的顧客端處理 (純視覺閃爍與震動，無任何音效廣播)
 function handleIncomingCallEvent(calledNum, counter) {
   // 畫面數字閃爍動畫
   if (customerElements.currentNumberDisplay) {
@@ -80,19 +73,13 @@ function handleIncomingCallEvent(calledNum, counter) {
   const myNumStr = customerElements.myNumberInput ? customerElements.myNumberInput.value.trim() : '';
   const myNum = myNumStr ? parseInt(myNumStr, 10) : null;
 
-  // 若輪到這支手機輸入的號碼，加強震動！
+  // 若輪到這支手機輸入的號碼，震動手機提醒
   if (myNum && myNum === calledNum) {
     if ('vibrate' in navigator) {
       try {
         navigator.vibrate([400, 200, 400, 200, 400]);
       } catch (e) {}
     }
-    playDingDong(true);
-    speakCall(calledNum, counter || appState.settings.counter, true);
-  } else {
-    // 一般叫號提醒
-    playDingDong();
-    speakCall(calledNum, counter || appState.settings.counter);
   }
 }
 
@@ -214,30 +201,7 @@ function renderCustomerUI() {
   }
 }
 
-function updateAudioControlsUI() {
-  if (customerElements.voiceToggleBtn) {
-    if (appState.settings.voiceEnabled) {
-      customerElements.voiceToggleBtn.classList.add('active');
-    } else {
-      customerElements.voiceToggleBtn.classList.remove('active');
-    }
-  }
-
-  if (customerElements.soundToggleBtn) {
-    if (appState.settings.soundEnabled) {
-      customerElements.soundToggleBtn.classList.add('active');
-    } else {
-      customerElements.soundToggleBtn.classList.remove('active');
-    }
-  }
-}
-
 function setupCustomerEventListeners() {
-  // 首次點擊啟用 AudioContext
-  document.body.addEventListener('click', () => {
-    getAudioContext();
-  }, { once: true });
-
   // 查詢我的號碼牌按鈕與即時輸入事件
   if (customerElements.checkMyNumberBtn) {
     customerElements.checkMyNumberBtn.addEventListener('click', updateMyNumberStatus);
@@ -253,25 +217,6 @@ function setupCustomerEventListeners() {
       customerElements.myNumberInput.value = '';
       localStorage.removeItem(CUSTOMER_SAVED_NUMBER_KEY);
       updateMyNumberStatus();
-    });
-  }
-
-  // 語音廣播開關
-  if (customerElements.voiceToggleBtn) {
-    customerElements.voiceToggleBtn.addEventListener('click', () => {
-      appState.settings.voiceEnabled = !appState.settings.voiceEnabled;
-      updateAudioControlsUI();
-      saveState('SETTINGS_UPDATED');
-    });
-  }
-
-  // 音效開關
-  if (customerElements.soundToggleBtn) {
-    customerElements.soundToggleBtn.addEventListener('click', () => {
-      appState.settings.soundEnabled = !appState.settings.soundEnabled;
-      updateAudioControlsUI();
-      saveState('SETTINGS_UPDATED');
-      if (appState.settings.soundEnabled) playDingDong();
     });
   }
 }
