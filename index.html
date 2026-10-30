@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>現場叫號看板</title>
-  <link rel="stylesheet" href="style.css?v=2.7">
+  <link rel="stylesheet" href="style.css?v=2.8">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
@@ -75,7 +75,7 @@
         </div>
 
         <div style="display: flex; gap: 8px; margin-bottom: 12px;">
-          <input type="number" id="myNumberInput" placeholder="請輸入您的號碼（例：5）" min="1" max="999"
+          <input type="number" id="myNumberInput" placeholder="請輸入您的號碼（例：10）" min="1" max="999"
             style="flex: 1; padding: 12px 14px; border-radius: 10px; border: 1.5px solid rgba(255, 255, 255, 0.18); background: rgba(15, 23, 42, 0.85); color: #fff; font-size: 1.1rem; font-family: 'Share Tech Mono', monospace; outline: none; box-sizing: border-box;">
           <button id="checkMyNumberBtn" class="pill-btn highlight-link" style="padding: 0 20px; font-weight: 700; font-size: 0.95rem; white-space: nowrap; border-radius: 10px; background: #2563eb; color: #fff; border: none; cursor: pointer;">
             查詢
@@ -85,17 +85,38 @@
           </button>
         </div>
 
+        <!-- 震動提醒時機設定 -->
+        <div class="vibrate-setting-row" style="background: rgba(15, 23, 42, 0.55); padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.08); margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <span>📳</span>
+            <span style="font-size: 0.85rem; color: #cbd5e1; font-weight: 600;">震動提醒時機：</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <select id="vibrateTimingSelect" style="padding: 6px 8px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.2); background: #1e293b; color: #f8fafc; font-size: 0.82rem; outline: none;">
+              <option value="0">到號時震動 (差 0 人)</option>
+              <option value="1">提前 1 個人震動</option>
+              <option value="2">提前 2 個人震動</option>
+              <option value="3">提前 3 個人震動</option>
+              <option value="5">提前 5 個人震動</option>
+            </select>
+            <button id="testVibrateBtn" type="button" style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #cbd5e1; border-radius: 8px; padding: 6px 10px; font-size: 0.78rem; cursor: pointer; white-space: nowrap;" title="測試手機震動">
+              測試震動
+            </button>
+          </div>
+        </div>
+
         <!-- 計算結果即時顯示區 -->
         <div id="myResultBox" class="hidden" style="border-radius: 12px; padding: 14px 16px; text-align: center; transition: all 0.25s ease;">
           <div id="myResultMainText" style="font-size: 1.2rem; font-weight: 900; margin-bottom: 4px; letter-spacing: 0.5px;"></div>
           <div id="myResultSubText" style="font-size: 0.85rem; opacity: 0.9;"></div>
+          <div id="myResultVibrateHint" style="font-size: 0.82rem; color: #93c5fd; margin-top: 8px; padding-top: 8px; border-top: 1px dashed rgba(255,255,255,0.15);"></div>
         </div>
       </section>
     </main>
   </div>
 
-  <script src="config.js?v=2.7"></script>
-  <script src="shared.js?v=2.7"></script>
-  <script src="customer.js?v=2.7"></script>
+  <script src="config.js?v=2.8"></script>
+  <script src="shared.js?v=2.8"></script>
+  <script src="customer.js?v=2.8"></script>
 </body>
 </html>

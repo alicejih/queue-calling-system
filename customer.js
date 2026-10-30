@@ -1,6 +1,6 @@
 /**
  * 智慧叫號排隊系統 - 顧客手機查號專屬邏輯 (Live Customer Calling Board)
- * 專為顧客在手機隨時查閱現場叫號進度、輸入自己號碼即時計算差幾人設計（無音效與語音干擾）
+ * 專為顧客在手機隨時查閱現場叫號進度、輸入自己號碼即時計算差幾人與自訂震動提醒設計
  */
 
 const customerElements = {
@@ -18,11 +18,18 @@ const customerElements = {
   clearMyNumberBtn: document.getElementById('clearMyNumberBtn'),
   myResultBox: document.getElementById('myResultBox'),
   myResultMainText: document.getElementById('myResultMainText'),
-  myResultSubText: document.getElementById('myResultSubText')
+  myResultSubText: document.getElementById('myResultSubText'),
+  myResultVibrateHint: document.getElementById('myResultVibrateHint'),
+
+  // 震動提醒時機設定
+  vibrateTimingSelect: document.getElementById('vibrateTimingSelect'),
+  testVibrateBtn: document.getElementById('testVibrateBtn')
 };
 
 const CUSTOMER_SAVED_NUMBER_KEY = 'CUSTOMER_TRACKED_NUMBER_V1';
+const CUSTOMER_SAVED_VIBRATE_KEY = 'CUSTOMER_VIBRATE_ADVANCE_V1';
 let lastNotifiedCallNumber = null;
+let lastVibratedKey = null;
 
 function initCustomerView() {
   loadState();
@@ -31,6 +38,12 @@ function initCustomerView() {
   const savedNum = localStorage.getItem(CUSTOMER_SAVED_NUMBER_KEY);
   if (savedNum && customerElements.myNumberInput) {
     customerElements.myNumberInput.value = savedNum;
+  }
+
+  // 還原震動設定
+  const savedVibrate = localStorage.getItem(CUSTOMER_SAVED_VIBRATE_KEY);
+  if (savedVibrate && customerElements.vibrateTimingSelect) {
+    customerElements.vibrateTimingSelect.value = savedVibrate;
   }
 
   setupCustomerEventListeners();
@@ -45,7 +58,7 @@ function initCustomerView() {
     renderCustomerUI();
     updateMyNumberStatus();
 
-    // 叫號跳動與震動提示
+    // 叫號跳動與震動提醒
     if (event.type === 'CALL_NUMBER' || event.type === 'SHEET_SYNC_UPDATE') {
       if (event.number !== null && event.number !== undefined && event.number !== lastNotifiedCallNumber) {
         lastNotifiedCallNumber = event.number;
@@ -70,20 +83,61 @@ function handleIncomingCallEvent(calledNum, counter) {
     customerElements.currentNumberDisplay.classList.add('flash');
   }
 
-  const myNumStr = customerElements.myNumberInput ? customerElements.myNumberInput.value.trim() : '';
-  const myNum = myNumStr ? parseInt(myNumStr, 10) : null;
+  checkAndTriggerVibration(calledNum);
+}
 
-  // 若輪到這支手機輸入的號碼，震動手機提醒
-  if (myNum && myNum === calledNum) {
-    if ('vibrate' in navigator) {
-      try {
-        navigator.vibrate([400, 200, 400, 200, 400]);
-      } catch (e) {}
+// 執行震動
+function doVibrate(pattern) {
+  if ('vibrate' in navigator) {
+    try {
+      navigator.vibrate(pattern);
+    } catch (e) {}
+  }
+}
+
+// 檢查是否達到震動提醒時機
+function checkAndTriggerVibration(calledNum) {
+  const myNumStr = customerElements.myNumberInput ? customerElements.myNumberInput.value.trim() : '';
+  if (!myNumStr || isNaN(myNumStr)) return;
+  const myNum = parseInt(myNumStr, 10);
+  if (myNum <= 0) return;
+
+  const advanceSetting = parseInt(customerElements.vibrateTimingSelect ? customerElements.vibrateTimingSelect.value : '0', 10);
+
+  // 1. 到號時震動 (大震動)
+  if (calledNum === myNum) {
+    const key = `TURN_${calledNum}`;
+    if (lastVibratedKey !== key) {
+      lastVibratedKey = key;
+      doVibrate([500, 200, 500, 200, 500]);
+    }
+    return;
+  }
+
+  // 2. 提前震動：依據前面剩餘人數判定
+  if (advanceSetting > 0 && calledNum < myNum) {
+    const cur = appState.currentNumber;
+    const waitingList = Array.isArray(appState.waitingList) ? appState.waitingList : [];
+
+    let ahead = 0;
+    const idxInWait = waitingList.findIndex(t => t.number === myNum);
+    if (idxInWait !== -1) {
+      ahead = idxInWait;
+    } else {
+      ahead = cur !== null ? Math.max(0, myNum - cur) : myNum;
+    }
+
+    if (ahead <= advanceSetting && ahead > 0) {
+      const key = `ADV_${myNum}_${advanceSetting}_AT_${calledNum}`;
+      if (lastVibratedKey !== key) {
+        lastVibratedKey = key;
+        doVibrate([400, 150, 400]);
+      }
     }
   }
 }
 
-// 核心計算：顧客輸入自己的號碼牌，即時計算前面還差幾個人
+// 核心計算：顧客輸入自己的號碼牌，即時計算前面還差幾個人與震動提示
 function updateMyNumberStatus() {
   const input = customerElements.myNumberInput;
   if (!input) return;
@@ -93,6 +147,7 @@ function updateMyNumberStatus() {
   const mainText = customerElements.myResultMainText;
   const subText = customerElements.myResultSubText;
   const clearBtn = customerElements.clearMyNumberBtn;
+  const vibrateHint = customerElements.myResultVibrateHint;
 
   if (!valStr || isNaN(valStr)) {
     if (resultBox) resultBox.classList.add('hidden');
@@ -116,6 +171,7 @@ function updateMyNumberStatus() {
 
   const cur = appState.currentNumber;
   const waitingList = Array.isArray(appState.waitingList) ? appState.waitingList : [];
+  const advanceSetting = parseInt(customerElements.vibrateTimingSelect ? customerElements.vibrateTimingSelect.value : '0', 10);
 
   // 情況 1：輪到我了！
   if (cur !== null && myNum === cur) {
@@ -124,6 +180,9 @@ function updateMyNumberStatus() {
     resultBox.style.color = '#34d399';
     mainText.innerHTML = '🎉 輪到您了！請前往櫃檯辦理';
     subText.textContent = `您持有的號碼為 ${formatNumber(myNum)} 號，請立即至【${appState.settings.counter || '1 號櫃檯'}】辦理！`;
+    if (vibrateHint) {
+      vibrateHint.innerHTML = '📳 <strong>已觸發到號震動提醒</strong>';
+    }
     return;
   }
 
@@ -134,6 +193,9 @@ function updateMyNumberStatus() {
     resultBox.style.color = '#f87171';
     mainText.innerHTML = `⚠️ 您的號碼 ${formatNumber(myNum)} 號可能已過號`;
     subText.textContent = `現場目前叫至 ${formatNumber(cur)} 號，若您已在現場請向櫃檯人員洽詢辦理！`;
+    if (vibrateHint) {
+      vibrateHint.innerHTML = 'ℹ️ 若需補辦請洽現場工作人員';
+    }
     return;
   }
 
@@ -162,6 +224,21 @@ function updateMyNumberStatus() {
   } else {
     mainText.innerHTML = `⏳ 目前前面還差 <strong style="font-size: 1.6rem; color: #fbbf24; font-family: 'Share Tech Mono', monospace; text-shadow: 0 0 10px rgba(251,191,36,0.3);">${ahead}</strong> 個人`;
     subText.textContent = `您的號碼牌：${formatNumber(myNum)} 號 ｜ 現場叫至：${cur !== null ? formatNumber(cur) + ' 號' : '待命中'}`;
+  }
+
+  // 清楚顯示震動提醒預報
+  if (vibrateHint) {
+    if (advanceSetting === 0) {
+      vibrateHint.innerHTML = `📳 <strong>震動時機</strong>：將在現場叫到第 <strong>${formatNumber(myNum)} 號</strong>（到號時）手機震動提醒`;
+    } else {
+      const targetTriggerNum = Math.max(1, myNum - advanceSetting);
+      vibrateHint.innerHTML = `📳 <strong>震動時機</strong>：將在現場叫到第 <strong>${formatNumber(targetTriggerNum)} 號</strong>（還差 ${advanceSetting} 人）時提前為您手機震動！`;
+    }
+  }
+
+  // 若目前狀態剛好達到提前震動門檻，即時檢驗
+  if (cur !== null) {
+    checkAndTriggerVibration(cur);
   }
 }
 
@@ -216,7 +293,37 @@ function setupCustomerEventListeners() {
     customerElements.clearMyNumberBtn.addEventListener('click', () => {
       customerElements.myNumberInput.value = '';
       localStorage.removeItem(CUSTOMER_SAVED_NUMBER_KEY);
+      lastVibratedKey = null;
       updateMyNumberStatus();
+    });
+  }
+
+  // 震動時機切換事件
+  if (customerElements.vibrateTimingSelect) {
+    customerElements.vibrateTimingSelect.addEventListener('change', () => {
+      localStorage.setItem(CUSTOMER_SAVED_VIBRATE_KEY, customerElements.vibrateTimingSelect.value);
+      lastVibratedKey = null;
+      updateMyNumberStatus();
+    });
+  }
+
+  // 測試手機震動按鈕
+  if (customerElements.testVibrateBtn) {
+    customerElements.testVibrateBtn.addEventListener('click', () => {
+      if ('vibrate' in navigator) {
+        try {
+          const success = navigator.vibrate([300, 150, 300]);
+          if (success) {
+            alert('📳 已觸發震動！您的手機支援震動提醒。');
+          } else {
+            alert('📳 已發送震動指令！（若無震動，請確認手機已關閉靜音或開啟觸覺回饋）');
+          }
+        } catch (e) {
+          alert('📳 手機已收到震動指令！');
+        }
+      } else {
+        alert('ℹ️ 此手機瀏覽器未開放震動權限（如 iPhone Safari），系統將以畫面醒目閃爍與狀態顏色進行視覺提醒！');
+      }
     });
   }
 }
