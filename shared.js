@@ -250,8 +250,16 @@ function fetchFromPublicSpreadsheetGviz() {
   isFetchingFromSheet = true;
   const callbackName = '__gvizQueueCallback';
 
+  // 防卡死計時器 (若 3 秒內未回傳自動解鎖)
+  const timer = setTimeout(() => {
+    isFetchingFromSheet = false;
+    const el = document.getElementById('gviz-jsonp-script');
+    if (el) el.remove();
+  }, 3000);
+
   // 設定全域回呼
   window[callbackName] = function(json) {
+    clearTimeout(timer);
     isFetchingFromSheet = false;
     try {
       parseAndApplyGvizData(json);
@@ -270,6 +278,7 @@ function fetchFromPublicSpreadsheetGviz() {
   script.id = 'gviz-jsonp-script';
   script.src = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=responseHandler:${callbackName}&sheet=%E5%B7%A5%E4%BD%9C%E5%8D%80&_t=${Date.now()}`;
   script.onerror = function() {
+    clearTimeout(timer);
     isFetchingFromSheet = false;
     const el = document.getElementById('gviz-jsonp-script');
     if (el) el.remove();
@@ -393,7 +402,7 @@ function listenToSyncEvents(callback) {
     }
   });
 
-  // 3. 每 2.5 秒自動向 Google 試算表與本地 storage 抓取最新狀態
+  // 3. 每 1.2 秒自動向 Google 試算表與本地 storage 抓取最新狀態 (確保跨裝置零時差)
   setInterval(() => {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw && raw !== lastKnownStateString) {
@@ -403,9 +412,9 @@ function listenToSyncEvents(callback) {
       }
     }
 
-    // 每 2.5 秒自動同步 Google 試算表最新進度
+    // 每 1.2 秒自動同步 Google 試算表最新進度
     fetchLatestFromSheet();
-  }, 2500);
+  }, 1200);
 
   updateSheetSyncStatus();
 }

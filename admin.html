@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>櫃檯管理後台 | 智慧叫號排隊系統</title>
-  <link rel="stylesheet" href="style.css">
+  <title>櫃檯管理控制台</title>
+  <link rel="stylesheet" href="style.css?v=2.6">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
@@ -17,9 +17,9 @@
       <div style="font-size: 3rem; margin-bottom: 8px;">🔒</div>
       <h3 style="margin-bottom: 4px;">櫃檯管理後台驗證</h3>
       <p class="modal-desc" style="font-size: 0.88rem; margin-bottom: 16px;">
-        本頁面僅供店員與管理者使用，請輸入管理 PIN 碼：
+        本頁面僅供店員與管理者使用，請輸入管理密碼：
       </p>
-      <input type="password" id="adminPinInput" placeholder="請輸入管理密碼 (預設 8888)" style="width: 100%; padding: 12px; font-size: 1.1rem; text-align: center; border-radius: 10px; border: 1.5px solid #cbd5e1; margin-bottom: 14px; letter-spacing: 3px; box-sizing: border-box;">
+      <input type="password" id="adminPinInput" placeholder="請輸入密碼 (預設 8888)" style="width: 100%; padding: 12px; font-size: 1.1rem; text-align: center; border-radius: 10px; border: 1.5px solid #cbd5e1; margin-bottom: 14px; letter-spacing: 3px; box-sizing: border-box;">
       <div id="adminPinError" style="color: #ef4444; font-size: 0.85rem; margin-bottom: 10px; display: none;">密碼錯誤，請重新輸入！</div>
       <button id="adminLoginBtn" class="modal-btn" style="background: #2563eb; width: 100%;">解鎖進入後台</button>
       <div style="margin-top: 14px;">
@@ -38,7 +38,6 @@
             <h1>櫃檯管理控制台</h1>
             <span class="cloud-sync-badge local" id="cloudSyncBadge"><span class="dot"></span> 連線中</span>
           </div>
-          <p class="subtitle">Operator & Admin Console</p>
         </div>
       </div>
       <div class="header-controls">
@@ -48,11 +47,14 @@
         <button id="openCustomerViewBtn" class="pill-btn" title="在新分頁開啟顧客端網頁">
           <span class="icon">🔗</span> 顧客查號頁
         </button>
+        <button id="openSheetSettingsBtn" class="pill-btn" title="綁定個人的 Google 試算表，自動雲端記錄叫號 CSV">
+          <span class="icon">📊</span> 綁定試算表
+        </button>
         <button id="voiceToggleBtn" class="pill-btn active" title="切換後台語音提示">
-          <span class="icon">🔊</span> 語音：<span id="voiceStatusText">開啟</span>
+          <span class="icon">🔊</span> 語音
         </button>
         <button id="soundToggleBtn" class="pill-btn active" title="切換後台提示音效">
-          <span class="icon">🎵</span> 提示音：<span id="soundStatusText">開啟</span>
+          <span class="icon">🎵</span> 音效
         </button>
         <button id="resetAllBtn" class="pill-btn danger" title="重置今天所有叫號與取號數據">
           <span class="icon">🔄</span> 今日歸零
@@ -60,41 +62,24 @@
       </div>
     </header>
 
-    <!-- 頂部即時統計與資料存檔列 -->
-    <section class="admin-top-toolbar">
-      <div class="admin-stats-bar">
-        <div class="stat-badge-card waiting-stat">
+    <!-- 頂部即時統計列 -->
+    <section class="admin-top-toolbar" style="margin-bottom: 16px;">
+      <div class="admin-stats-bar" style="width: 100%; display: flex; justify-content: space-around;">
+        <div class="stat-badge-card waiting-stat" style="flex: 1; text-align: center;">
           <span class="stat-badge-title">等候辦理</span>
           <span class="stat-badge-num" id="adminWaitingTotal">0</span>
           <span class="stat-badge-unit">人</span>
         </div>
-        <div class="stat-badge-card issued-stat">
+        <div class="stat-badge-card issued-stat" style="flex: 1; text-align: center;">
           <span class="stat-badge-title">今日累計發號</span>
           <span class="stat-badge-num" id="adminIssuedTotal">0</span>
           <span class="stat-badge-unit">張</span>
         </div>
-        <div class="stat-badge-card completed-stat">
+        <div class="stat-badge-card completed-stat" style="flex: 1; text-align: center;">
           <span class="stat-badge-title">已完成服務</span>
           <span class="stat-badge-num" id="adminCompletedTotal">0</span>
           <span class="stat-badge-unit">人</span>
         </div>
-      </div>
-
-      <!-- 資料報表與備份功能列 (CSV / JSON / Google 試算表) -->
-      <div class="admin-data-actions">
-        <button id="openSheetSettingsBtn" class="pill-btn highlight-link" title="綁定個人的 Google 試算表，自動雲端記錄叫號 CSV">
-          <span class="icon">📊</span> 綁定 Google 試算表
-        </button>
-        <button id="exportCsvBtn" class="pill-btn" title="匯出今日叫號紀錄為 CSV 試算表（Excel 直接開啟）">
-          <span class="icon">📥</span> 匯出 CSV 報表
-        </button>
-        <button id="exportJsonBtn" class="pill-btn" title="將目前所有排隊狀態與紀錄備份為 JSON 檔案">
-          <span class="icon">💾</span> 備份 JSON
-        </button>
-        <button id="importJsonBtn" class="pill-btn" title="從先前備份的 JSON 檔案還原叫號排隊狀態">
-          <span class="icon">📤</span> 還原 JSON
-        </button>
-        <input type="file" id="jsonFileInput" accept=".json" style="display:none">
       </div>
     </section>
 
@@ -125,34 +110,35 @@
             <div id="adminStatusSummary" class="admin-status-text">目前暫無叫號中顧客</div>
           </div>
 
-          <div class="admin-actions-grid">
-            <button id="adminCallPrevBtn" class="action-btn secondary" title="呼叫上一號">
-              ⏮ 上一號
+          <!-- 精簡的核心 3 大操作按鈕 -->
+          <div class="simple-three-actions" style="margin-top: 18px;">
+            <button id="adminIssueTicketBtn" class="action-btn primary-issue" title="發出下一張號碼牌">
+              <span class="btn-icon">🎫</span>
+              <span class="btn-title">1. 發號碼</span>
+              <span class="btn-sub">發放新號碼牌</span>
             </button>
-            <button id="adminRepeatCallBtn" class="action-btn repeat" title="重新廣播當前號碼">
-              📢 重新叫號
+
+            <button id="adminRepeatCallBtn" class="action-btn repeat" title="再次廣播當前叫號">
+              <span class="btn-icon">📢</span>
+              <span class="btn-title">2. 重新叫號</span>
+              <span class="btn-sub">廣播當前號碼</span>
             </button>
-            <button id="adminCallNextBtn" class="action-btn primary call-next-accent" title="呼叫下一位等候顧客">
-              ⏭ 叫下一號
-            </button>
-            <button id="adminIssueTicketBtn" class="action-btn info-action" title="櫃檯直接代客抽號碼牌">
-              🎫 櫃檯代客發號
+
+            <button id="adminCompleteAndNextBtn" class="action-btn call-next-accent" title="完成當前號碼並自動呼叫下一號">
+              <span class="btn-icon">✅</span>
+              <span class="btn-title">3. 這號好了</span>
+              <span class="btn-sub">完成並自動跳下一號</span>
             </button>
           </div>
         </div>
       </section>
 
-      <!-- 核心 3: 列表按下去代表這一號好了（等候與處理清單管理） -->
-      <section class="queue-section">
+      <!-- 現場等候名單 (簡潔直覺隊列預覽) -->
+      <section class="queue-section" style="margin-top: 20px;">
         <div class="section-title-bar">
           <div>
-            <h3>📋 隊列處理管理</h3>
-            <p class="section-hint">💡 操作提示：點擊等候卡片上的「<strong class="highlight-text">✅ 這號好了</strong>」或直接點選卡片，即代表該號完成並自動歸檔！</p>
-          </div>
-          <div class="filter-tabs">
-            <button class="tab-btn active" data-tab="waiting">等候中 (<span id="tabWaitingCount">0</span>)</button>
-            <button class="tab-btn" data-tab="completed">已完成 (<span id="tabCompletedCount">0</span>)</button>
-            <button class="tab-btn" data-tab="logs">即時日誌 (<span id="tabLogsCount">0</span>)</button>
+            <h3>📋 現場等候名單 (<span id="tabWaitingCount">0</span> 位等候中)</h3>
+            <p class="section-hint">按上方「<strong>3. 這號好了</strong>」系統會自動完成當前號碼並呼叫隊列中的下一號！</p>
           </div>
         </div>
 
@@ -163,63 +149,11 @@
           </div>
           <div id="adminEmptyWaitingNotice" class="empty-notice">
             <div class="empty-icon">🎉</div>
-            <p>目前沒有等候中的號碼！點擊上方「櫃檯代客發號」或等候顧客在看板取號。</p>
-          </div>
-        </div>
-
-        <!-- 已完成列表容器 -->
-        <div id="completedListContainer" class="queue-list-container hidden">
-          <div class="completed-table-wrap">
-            <table class="completed-table">
-              <thead>
-                <tr>
-                  <th>號碼</th>
-                  <th>取號時間</th>
-                  <th>完成時間</th>
-                  <th>等候歷時</th>
-                  <th>服務櫃檯</th>
-                  <th>操作</th>
-                </tr>
-              </thead>
-              <tbody id="adminCompletedTableBody">
-                <!-- 動態注入已完成項目 -->
-              </tbody>
-            </table>
-            <div id="adminEmptyCompletedNotice" class="empty-notice">
-              <p>尚無已完成的號碼記錄。</p>
-            </div>
-          </div>
-        </div>
-
-        <!-- 即時活動日誌容器 (即時 CSV / JSON 紀錄預覽) -->
-        <div id="logsListContainer" class="queue-list-container hidden">
-          <div class="completed-table-wrap">
-            <table class="completed-table">
-              <thead>
-                <tr>
-                  <th>時間</th>
-                  <th>操作動作</th>
-                  <th>排隊號碼</th>
-                  <th>服務櫃檯</th>
-                  <th>備註詳細</th>
-                </tr>
-              </thead>
-              <tbody id="adminLogsTableBody">
-                <!-- 動態注入每一筆動作紀錄 -->
-              </tbody>
-            </table>
-            <div id="adminEmptyLogsNotice" class="empty-notice">
-              <p>尚無操作紀錄，點擊「叫號」或「取號」時會自動寫入此處。</p>
-            </div>
+            <p>目前沒有等候中的號碼！點擊上方「1. 發號碼」即可發出新號碼。</p>
           </div>
         </div>
       </section>
     </main>
-
-    <!-- 底部資訊 -->
-    <footer class="footer">
-      <p>智慧叫號排隊系統 &copy; <span id="currentYear">2026</span> | 櫃檯管理端 | 即時雙向連動現場大看板</p>
-    </footer>
   </div>
 
   <!-- 顧客手機查號 QR Code 彈窗 -->
@@ -227,7 +161,7 @@
     <div class="modal-card">
       <div class="modal-notch"></div>
       <h3>📱 顧客手機查號 QR Code</h3>
-      <p class="modal-desc">顧客使用手機相機掃描下方 QR Code，即可在手機隨身查號看進度：</p>
+      <p class="modal-desc">顧客使用手機相機掃描下方 QR Code，即可在手機即時查看叫號看板並輸入號碼：</p>
       <div class="qr-image-wrap" style="margin: 16px 0; display: flex; justify-content: center;">
         <img id="qrImage" src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=https://alicejih.github.io/queue-calling-system/" alt="顧客查號 QR Code" style="border-radius: 12px; border: 2px solid #e2e8f0; width: 200px; height: 200px;">
       </div>
@@ -245,17 +179,10 @@
   <div id="sheetSettingsModal" class="modal-overlay hidden">
     <div class="modal-card" style="max-width: 500px; text-align: left;">
       <div class="modal-notch"></div>
-      <h3 style="text-align: center; margin-bottom: 8px;">📊 綁定 Google 試算表 (安全雲端)</h3>
+      <h3 style="text-align: center; margin-bottom: 8px;">📊 綁定 Google 試算表</h3>
       <p class="modal-desc" style="text-align: left; font-size: 0.9rem; line-height: 1.6;">
-        只要綁定您的個人 Google 試算表，每次點叫號、取號都會<strong>自動即時寫入試算表成為線上 CSV</strong>，並且能安全跨手機即時查號：
+        綁定您的 Google 試算表後，每次發號、叫號、完成服務都會<strong>自動即時寫入試算表工作區與 LOG</strong>，跨手機即時同步：
       </p>
-
-      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; margin: 12px 0; font-size: 0.82rem; color: #334155;">
-        <strong>📋 快速 3 步驟設定：</strong><br>
-        1. 建立一個 Google 試算表 ➔ 點選「擴充功能」➔「Apps Script」<br>
-        2. 將專案中的 <code>google_apps_script.js</code> 內容覆蓋貼上<br>
-        3. 點「部署」➔「新部署」➔「網頁應用程式 (所有人可存取)」➔ 複製網址
-      </div>
 
       <div style="margin-bottom: 16px;">
         <label style="display: block; font-size: 0.85rem; font-weight: 700; color: #1e293b; margin-bottom: 6px;">
@@ -271,8 +198,8 @@
     </div>
   </div>
 
-  <script src="config.js?v=2.3"></script>
-  <script src="shared.js?v=2.3"></script>
-  <script src="admin.js?v=2.3"></script>
+  <script src="config.js?v=2.6"></script>
+  <script src="shared.js?v=2.6"></script>
+  <script src="admin.js?v=2.6"></script>
 </body>
 </html>

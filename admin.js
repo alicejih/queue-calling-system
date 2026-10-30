@@ -1,38 +1,27 @@
 /**
- * 智慧叫號排隊系統 - 管理端 / 櫃檯控制台邏輯 (Operator & Admin Console Logic)
- * 專為櫃檯人員、店員、護理師與後台管理設計
+ * 智慧叫號排隊系統 - 櫃檯管理控制台 (Operator Console Logic)
+ * 專為櫃檯人員設計：極簡 3 大按鈕（發號碼、重新叫號、這號好了自動跳下一號）
  */
 
 const adminElements = {
   // 叫號控制台
   adminCurrentNumber: document.getElementById('adminCurrentNumber'),
   adminCounterSelect: document.getElementById('adminCounterSelect'),
-  adminCallNextBtn: document.getElementById('adminCallNextBtn'),
-  adminCallPrevBtn: document.getElementById('adminCallPrevBtn'),
-  adminRepeatCallBtn: document.getElementById('adminRepeatCallBtn'),
   adminIssueTicketBtn: document.getElementById('adminIssueTicketBtn'),
+  adminRepeatCallBtn: document.getElementById('adminRepeatCallBtn'),
+  adminCompleteAndNextBtn: document.getElementById('adminCompleteAndNextBtn'),
   adminStatusSummary: document.getElementById('adminStatusSummary'),
 
   // 清單區
   waitingGrid: document.getElementById('adminWaitingGrid'),
   emptyWaitingNotice: document.getElementById('adminEmptyWaitingNotice'),
-  completedTableBody: document.getElementById('adminCompletedTableBody'),
-  emptyCompletedNotice: document.getElementById('adminEmptyCompletedNotice'),
-  logsTableBody: document.getElementById('adminLogsTableBody'),
-  emptyLogsNotice: document.getElementById('adminEmptyLogsNotice'),
-
   waitingListContainer: document.getElementById('waitingListContainer'),
-  completedListContainer: document.getElementById('completedListContainer'),
-  logsListContainer: document.getElementById('logsListContainer'),
 
   // 計數器標籤
   tabWaitingCount: document.getElementById('tabWaitingCount'),
-  tabCompletedCount: document.getElementById('tabCompletedCount'),
-  tabLogsCount: document.getElementById('tabLogsCount'),
   adminWaitingTotal: document.getElementById('adminWaitingTotal'),
   adminIssuedTotal: document.getElementById('adminIssuedTotal'),
   adminCompletedTotal: document.getElementById('adminCompletedTotal'),
-  tabBtns: document.querySelectorAll('.tab-btn'),
 
   // 頂部控制項
   voiceToggleBtn: document.getElementById('voiceToggleBtn'),
@@ -40,14 +29,7 @@ const adminElements = {
   soundToggleBtn: document.getElementById('soundToggleBtn'),
   soundStatusText: document.getElementById('soundStatusText'),
   openCustomerViewBtn: document.getElementById('openCustomerViewBtn'),
-  resetAllBtn: document.getElementById('resetAllBtn'),
-  currentYear: document.getElementById('currentYear'),
-
-  // 匯出/匯入按鈕
-  exportCsvBtn: document.getElementById('exportCsvBtn'),
-  exportJsonBtn: document.getElementById('exportJsonBtn'),
-  importJsonBtn: document.getElementById('importJsonBtn'),
-  jsonFileInput: document.getElementById('jsonFileInput')
+  resetAllBtn: document.getElementById('resetAllBtn')
 };
 
 const ADMIN_PIN_KEY = 'ADMIN_PIN_CODE_V1';
@@ -59,7 +41,6 @@ function setupAdminAuth() {
   const loginBtn = document.getElementById('adminLoginBtn');
   const errorMsg = document.getElementById('adminPinError');
 
-  // 若本階段已通過驗證
   if (sessionStorage.getItem(ADMIN_AUTH_KEY) === 'true') {
     if (overlay) overlay.classList.add('hidden');
     return;
@@ -107,11 +88,7 @@ function initAdminView() {
   renderAdminUI();
   updateAudioControlsUI();
 
-  if (adminElements.currentYear) {
-    adminElements.currentYear.textContent = new Date().getFullYear();
-  }
-
-  // 監聽顧客端或其他視窗更新 (包含跨裝置 MQTT 雲端連線)
+  // 監聽顧客端或其他視窗更新 (包含跨裝置 Google 試算表同步)
   listenToSyncEvents((event) => {
     renderAdminUI();
   });
@@ -127,14 +104,13 @@ function updateDurations() {
   });
 }
 
-// 叫指定號碼 (自動寫入一筆活動日誌)
+// 叫指定號碼
 function adminCall(number) {
-  loadState(); // 確保讀取最新狀態
+  loadState();
   getAudioContext();
   appState.currentNumber = number;
   const currentCounter = appState.settings.counter || '1 號櫃檯';
 
-  // 寫入動作日誌 (即時紀錄於 JSON / CSV 資料庫)
   logActivity('叫號呼叫', number, currentCounter, '櫃檯廣播叫號');
 
   saveState('CALL_NUMBER', {
@@ -144,67 +120,14 @@ function adminCall(number) {
 
   renderAdminUI();
 
-  // 本地播放音效與語音
+  // 播放提示音與真人廣播
   playDingDong();
   speakCall(number, currentCounter);
 }
 
-// 叫下一號
-function adminCallNext() {
-  loadState(); // 確保讀取最新清單
-  if (appState.waitingList.length === 0) {
-    alert('目前沒有等候中的號碼！可點擊上方「櫃檯代客發號」。');
-    return;
-  }
-
-  let targetTicket = null;
-  if (appState.currentNumber === null) {
-    targetTicket = appState.waitingList[0];
-  } else {
-    const currentIndex = appState.waitingList.findIndex(t => t.number === appState.currentNumber);
-    if (currentIndex !== -1 && currentIndex + 1 < appState.waitingList.length) {
-      targetTicket = appState.waitingList[currentIndex + 1];
-    } else {
-      targetTicket = appState.waitingList.find(t => t.number > (appState.currentNumber || 0)) || appState.waitingList[0];
-    }
-  }
-
-  if (targetTicket) {
-    adminCall(targetTicket.number);
-  }
-}
-
-// 上一號
-function adminCallPrev() {
-  loadState();
-  if (appState.waitingList.length === 0) return;
-  const currentIndex = appState.waitingList.findIndex(t => t.number === appState.currentNumber);
-  if (currentIndex > 0) {
-    adminCall(appState.waitingList[currentIndex - 1].number);
-  } else {
-    adminCall(appState.waitingList[0].number);
-  }
-}
-
-// 重新叫號 (自動寫入一筆活動日誌)
-function adminRepeatCall() {
-  loadState();
-  if (appState.currentNumber === null) {
-    if (appState.waitingList.length > 0) {
-      adminCall(appState.waitingList[0].number);
-    } else {
-      alert('目前尚無叫號中的號碼！');
-    }
-    return;
-  }
-
-  logActivity('重新叫號', appState.currentNumber, appState.settings.counter, '再次廣播');
-  adminCall(appState.currentNumber);
-}
-
-// 櫃檯代客發號 (自動寫入一筆活動日誌)
+// ★ 核心功能 1：發號碼
 function adminIssueTicket() {
-  loadState(); // 確保流水號最新
+  loadState();
   getAudioContext();
   appState.lastIssuedNumber += 1;
   const currentNum = appState.lastIssuedNumber;
@@ -217,271 +140,192 @@ function adminIssueTicket() {
     timestamp: now.getTime()
   };
 
+  if (!Array.isArray(appState.waitingList)) {
+    appState.waitingList = [];
+  }
   appState.waitingList.push(ticket);
-  logActivity('櫃檯代客發號', currentNum, appState.settings.counter, '櫃檯發出新號碼');
+  logActivity('發號碼', currentNum, appState.settings.counter, '發放新號碼牌');
   saveState('TICKET_TAKEN', { ticket });
 
-  renderAdminUI();
-  playSuccessChime();
-}
-
-// 核心功能 3：點擊列表號碼代表這一號好了！(自動寫入一筆活動日誌)
-function markTicketCompleted(ticketId) {
-  loadState(); // 確保以最新狀態操作
-  const index = appState.waitingList.findIndex(t => t.id === ticketId);
-  if (index === -1) return;
-
-  const ticket = appState.waitingList[index];
-  const now = new Date();
-  const durationMinutes = Math.max(1, Math.round((now.getTime() - ticket.timestamp) / 60000));
-
-  // 從等候移至已完成
-  appState.waitingList.splice(index, 1);
-  appState.completedList.unshift({
-    ...ticket,
-    completedTime: getTimeString(now),
-    duration: durationMinutes,
-    counter: appState.settings.counter || '1 號櫃檯'
-  });
-
-  // 自動寫入完成日誌
-  logActivity('服務完成(這號好了)', ticket.number, appState.settings.counter, `等候歷時約 ${durationMinutes} 分鐘`);
-
-  playSuccessChime();
-
-  // 若標記完成的是目前叫號中的號碼，自動順延
-  if (appState.currentNumber === ticket.number) {
-    if (appState.waitingList.length > 0) {
-      const nextTicket = appState.waitingList[0];
-      appState.currentNumber = nextTicket.number;
-      setTimeout(() => {
-        adminCall(nextTicket.number);
-      }, 350);
-    } else {
-      appState.currentNumber = null;
-    }
+  // 若目前無叫號中顧客，直接自動叫出此號！
+  if (appState.currentNumber === null) {
+    adminCall(currentNum);
+  } else {
+    renderAdminUI();
+    playSuccessChime();
   }
-
-  saveState('TICKET_COMPLETED', { ticketId });
-  renderAdminUI();
 }
 
-// 誤按復原
-function undoCompleted(ticketId) {
+// ★ 核心功能 2：重新叫號
+function adminRepeatCall() {
   loadState();
-  const idx = appState.completedList.findIndex(t => t.id === ticketId);
-  if (idx === -1) return;
-  const item = appState.completedList.splice(idx, 1)[0];
-  appState.waitingList.push({
-    id: item.id,
-    number: item.number,
-    time: item.time,
-    timestamp: item.timestamp
-  });
-
-  appState.waitingList.sort((a, b) => a.number - b.number);
-  logActivity('誤按復原', item.number, '', '放回等候隊列');
-  saveState('TICKET_RESTORED');
-  renderAdminUI();
-}
-
-// 匯出 CSV 試算表報表 (包含完整每一次叫號日誌，Excel 直接開啟)
-function exportToCSV() {
-  loadState();
-  const logs = appState.activityLogs || [];
-
-  if (logs.length === 0 && appState.completedList.length === 0 && appState.waitingList.length === 0) {
-    alert('今日尚無任何叫號或取號紀錄可供匯出！');
+  if (appState.currentNumber === null) {
+    if (appState.waitingList && appState.waitingList.length > 0) {
+      adminCall(appState.waitingList[0].number);
+    } else {
+      alert('目前尚無叫號中的號碼！請先點擊「1. 發號碼」。');
+    }
     return;
   }
 
-  // 加上 UTF-8 BOM (\uFEFF) 讓 Excel 打開不會亂碼
-  let csvContent = '\uFEFF紀錄序號,日期,時間,操作動作,排隊號碼,服務櫃檯,備註詳細\n';
-  
-  if (logs.length > 0) {
-    logs.forEach((log, idx) => {
-      csvContent += `"${logs.length - idx}","${log.date}","${log.time}","${log.action}","${log.number}","${log.counter}","${log.note}"\n`;
-    });
-  } else {
-    // 備援：若無 activityLogs 則匯出 completedList
-    appState.completedList.forEach((t, idx) => {
-      csvContent += `"${idx + 1}","今日","${t.completedTime}","服務完成","${formatNumber(t.number)}","${t.counter || '1 號櫃檯'}","等候約 ${t.duration} 分鐘"\n`;
-    });
+  logActivity('重新叫號', appState.currentNumber, appState.settings.counter, '再次廣播');
+  adminCall(appState.currentNumber);
+}
+
+// ★ 核心功能 3：這號好了 (當選擇這個的時候自動跳下一號碼)
+function adminCompleteAndNext() {
+  loadState();
+  getAudioContext();
+
+  const cur = appState.currentNumber;
+  if (cur === null) {
+    // 若當前無叫號，但等候隊列有號碼，直接叫第一位
+    if (appState.waitingList && appState.waitingList.length > 0) {
+      const nextTicket = appState.waitingList[0];
+      adminCall(nextTicket.number);
+      return;
+    } else {
+      alert('目前暫無叫號中顧客！點擊「1. 發號碼」即可發出新號碼。');
+      return;
+    }
   }
 
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  const dateStr = new Date().toISOString().split('T')[0];
-  a.href = url;
-  a.download = `叫號服務完整日誌紀錄_${dateStr}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  // 1. 完成當前叫號
+  const now = new Date();
+  const ticketIndex = appState.waitingList.findIndex(t => t.number === cur);
+  let completedTicket = null;
+  if (ticketIndex !== -1) {
+    completedTicket = appState.waitingList.splice(ticketIndex, 1)[0];
+  } else {
+    completedTicket = {
+      id: 'T-' + cur,
+      number: cur,
+      time: getTimeString(now),
+      timestamp: now.getTime()
+    };
+  }
+
+  if (!Array.isArray(appState.completedList)) {
+    appState.completedList = [];
+  }
+  appState.completedList.unshift({
+    ...completedTicket,
+    completedTime: getTimeString(now),
+    counter: appState.settings.counter || '1 號櫃檯'
+  });
+
+  logActivity('這號好了(服務完成)', cur, appState.settings.counter, '完成並跳下一號');
+
+  // 2. 自動判斷下一號碼
+  let nextNumberToCall = null;
+  if (appState.waitingList && appState.waitingList.length > 0) {
+    // 隊列中下一位
+    nextNumberToCall = appState.waitingList[0].number;
+  } else if (appState.lastIssuedNumber > cur) {
+    // 連續發號的下一號
+    nextNumberToCall = cur + 1;
+  }
+
+  if (nextNumberToCall !== null) {
+    appState.currentNumber = nextNumberToCall;
+    saveState('TICKET_COMPLETED', {
+      ticketId: completedTicket.id,
+      number: cur,
+      nextNumber: nextNumberToCall
+    });
+    // 呼叫下一號
+    setTimeout(() => {
+      adminCall(nextNumberToCall);
+    }, 150);
+  } else {
+    // 隊列已全部服務完成
+    appState.currentNumber = null;
+    saveState('TICKET_COMPLETED', {
+      ticketId: completedTicket.id,
+      number: cur,
+      nextNumber: null
+    });
+    renderAdminUI();
+    playSuccessChime();
+  }
 }
 
-// 匯出 JSON 完整資料 (包含完整狀態與每筆叫號紀錄)
-function exportToJSON() {
-  loadState();
-  const jsonStr = JSON.stringify(appState, null, 2);
-  const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  const dateStr = new Date().toISOString().split('T')[0];
-  a.href = url;
-  a.download = `queue_full_records_${dateStr}.json`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-
-// 匯入 JSON 備份
-function importFromJSON(file) {
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    try {
-      const parsed = JSON.parse(e.target.result);
-      if (parsed && (Array.isArray(parsed.waitingList) || Array.isArray(parsed.activityLogs))) {
-        applyIncomingState(parsed, 'RESTORE_BACKUP');
-        saveState('RESTORE_BACKUP');
-        alert('🎉 成功匯入並還原叫號排隊紀錄！');
-        renderAdminUI();
-      } else {
-        alert('檔案格式不符，請確認是有效的叫號備份 JSON 檔案。');
-      }
-    } catch (err) {
-      alert('讀取 JSON 檔案失敗：' + err.message);
-    }
-  };
-  reader.readAsText(file);
+// 點擊等候隊列中特定卡片直接呼叫該號
+function callSpecificWaitingTicket(number) {
+  adminCall(number);
 }
 
 // 渲染管理端介面
 function renderAdminUI() {
-  // 1. 叫號面板
-  if (appState.currentNumber !== null) {
-    adminElements.adminCurrentNumber.textContent = formatNumber(appState.currentNumber);
-    adminElements.adminStatusSummary.textContent = `正呼叫 ${formatNumber(appState.currentNumber)} 號至 ${appState.settings.counter || '1 號櫃檯'}`;
-    adminElements.adminStatusSummary.className = 'admin-status-text active';
-  } else {
-    adminElements.adminCurrentNumber.textContent = '---';
-    adminElements.adminStatusSummary.textContent = appState.waitingList.length > 0
-      ? `等待叫號：尚有 ${appState.waitingList.length} 位顧客等候中`
-      : '目前無待辦號碼，可點「代客發號」或等候顧客抽號';
-    adminElements.adminStatusSummary.className = 'admin-status-text';
+  // 目前叫號
+  if (adminElements.adminCurrentNumber) {
+    if (appState.currentNumber !== null) {
+      adminElements.adminCurrentNumber.textContent = formatNumber(appState.currentNumber);
+      if (adminElements.adminStatusSummary) {
+        adminElements.adminStatusSummary.textContent = `🔔 正在為 ${formatNumber(appState.currentNumber)} 號辦理中`;
+        adminElements.adminStatusSummary.className = 'admin-status-text active';
+      }
+    } else {
+      adminElements.adminCurrentNumber.textContent = '---';
+      if (adminElements.adminStatusSummary) {
+        const waitLen = Array.isArray(appState.waitingList) ? appState.waitingList.length : 0;
+        adminElements.adminStatusSummary.textContent = waitLen > 0
+          ? `目前無叫號中顧客（隊列有 ${waitLen} 人等候）`
+          : '目前暫無叫號中顧客';
+        adminElements.adminStatusSummary.className = 'admin-status-text';
+      }
+    }
   }
 
-  // 2. 統計數據
-  const logCount = (appState.activityLogs || []).length;
-  if (adminElements.tabWaitingCount) adminElements.tabWaitingCount.textContent = appState.waitingList.length;
-  if (adminElements.tabCompletedCount) adminElements.tabCompletedCount.textContent = appState.completedList.length;
-  if (adminElements.tabLogsCount) adminElements.tabLogsCount.textContent = logCount;
-  if (adminElements.adminWaitingTotal) adminElements.adminWaitingTotal.textContent = appState.waitingList.length;
-  if (adminElements.adminIssuedTotal) adminElements.adminIssuedTotal.textContent = appState.lastIssuedNumber;
-  if (adminElements.adminCompletedTotal) adminElements.adminCompletedTotal.textContent = appState.completedList.length;
+  // 頂部統計指標
+  const waitLen = Array.isArray(appState.waitingList) ? appState.waitingList.length : 0;
+  const completedLen = Array.isArray(appState.completedList) ? appState.completedList.length : 0;
 
-  // 3. 等候清單（點擊代表這一號好了）
+  if (adminElements.adminWaitingTotal) adminElements.adminWaitingTotal.textContent = waitLen;
+  if (adminElements.tabWaitingCount) adminElements.tabWaitingCount.textContent = waitLen;
+  if (adminElements.adminIssuedTotal) adminElements.adminIssuedTotal.textContent = appState.lastIssuedNumber || 0;
+  if (adminElements.adminCompletedTotal) adminElements.adminCompletedTotal.textContent = completedLen;
+
+  // 渲染現場等候名單
+  renderAdminWaitingGrid();
+}
+
+// 渲染等候隊列卡片
+function renderAdminWaitingGrid() {
+  if (!adminElements.waitingGrid) return;
   adminElements.waitingGrid.innerHTML = '';
-  if (appState.waitingList.length === 0) {
-    adminElements.emptyWaitingNotice.classList.remove('hidden');
+
+  const waitingList = Array.isArray(appState.waitingList) ? appState.waitingList : [];
+
+  if (waitingList.length === 0) {
+    if (adminElements.emptyWaitingNotice) adminElements.emptyWaitingNotice.classList.remove('hidden');
   } else {
-    adminElements.emptyWaitingNotice.classList.add('hidden');
-    appState.waitingList.forEach(ticket => {
+    if (adminElements.emptyWaitingNotice) adminElements.emptyWaitingNotice.classList.add('hidden');
+
+    waitingList.forEach((ticket, idx) => {
       const isCurrent = (ticket.number === appState.currentNumber);
       const card = document.createElement('div');
-      card.className = `ticket-item-card admin-interactive ${isCurrent ? 'is-current' : ''}`;
-      card.title = `點擊卡片標記「${formatNumber(ticket.number)} 號」服務完成`;
+      card.className = `ticket-item-card ${isCurrent ? 'is-current' : ''}`;
+      card.style.cursor = 'pointer';
+      card.title = '點擊可直接叫此號';
 
       card.innerHTML = `
-        <span class="ticket-badge-current">${isCurrent ? '🔔 叫號中' : '等候中'}</span>
+        <span class="ticket-badge-current">
+          ${isCurrent ? '🔔 目前叫號中' : `等候順位 第 ${idx + 1} 位`}
+        </span>
         <div class="card-num-row">
           <span class="item-num">${formatNumber(ticket.number)}</span>
           <span class="item-wait-badge" data-ts="${ticket.timestamp}">${calculateWaitDurationText(ticket.timestamp)}</span>
         </div>
         <div class="item-time-info">取號時間：${ticket.time}</div>
-        
-        <div class="admin-card-actions">
-          <button class="call-this-btn" type="button" title="直接廣播叫此號">
-            📢 叫此號
-          </button>
-          <button class="click-to-finish-btn" type="button" title="標記完成">
-            ✅ 這號好了
-          </button>
-        </div>
       `;
 
-      // 點擊「叫此號」
-      const callBtn = card.querySelector('.call-this-btn');
-      callBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        adminCall(ticket.number);
-      });
-
-      // 點擊卡片或「這號好了」標記完成
       card.addEventListener('click', () => {
-        markTicketCompleted(ticket.id);
+        callSpecificWaitingTicket(ticket.number);
       });
 
       adminElements.waitingGrid.appendChild(card);
     });
-  }
-
-  // 4. 已完成清單
-  adminElements.completedTableBody.innerHTML = '';
-  if (appState.completedList.length === 0) {
-    adminElements.emptyCompletedNotice.classList.remove('hidden');
-  } else {
-    adminElements.emptyCompletedNotice.classList.add('hidden');
-    appState.completedList.forEach(ticket => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td><span class="num-tag">${formatNumber(ticket.number)}</span></td>
-        <td>${ticket.time}</td>
-        <td>${ticket.completedTime}</td>
-        <td>約 ${ticket.duration} 分鐘</td>
-        <td>${ticket.counter || '1 號櫃檯'}</td>
-        <td>
-          <button class="undo-btn" data-id="${ticket.id}" title="誤按復原">↩ 復原</button>
-        </td>
-      `;
-
-      tr.querySelector('.undo-btn').addEventListener('click', (e) => {
-        e.stopPropagation();
-        undoCompleted(ticket.id);
-      });
-
-      adminElements.completedTableBody.appendChild(tr);
-    });
-  }
-
-  // 5. 即時動作日誌 (即時 CSV / JSON 紀錄預覽)
-  if (adminElements.logsTableBody) {
-    adminElements.logsTableBody.innerHTML = '';
-    const logs = appState.activityLogs || [];
-    if (logs.length === 0) {
-      if (adminElements.emptyLogsNotice) adminElements.emptyLogsNotice.classList.remove('hidden');
-    } else {
-      if (adminElements.emptyLogsNotice) adminElements.emptyLogsNotice.classList.add('hidden');
-      logs.forEach(log => {
-        const tr = document.createElement('tr');
-        let badgeClass = 'badge-call';
-        if (log.action.includes('取號')) badgeClass = 'badge-ticket';
-        if (log.action.includes('完成')) badgeClass = 'badge-complete';
-        if (log.action.includes('重置')) badgeClass = 'badge-danger';
-
-        tr.innerHTML = `
-          <td>${log.time}</td>
-          <td><span class="action-tag ${badgeClass}">${log.action}</span></td>
-          <td><span class="num-tag">${log.number}</span></td>
-          <td>${log.counter}</td>
-          <td>${log.note}</td>
-        `;
-        adminElements.logsTableBody.appendChild(tr);
-      });
-    }
   }
 }
 
@@ -489,72 +333,63 @@ function updateAudioControlsUI() {
   if (adminElements.voiceToggleBtn) {
     if (appState.settings.voiceEnabled) {
       adminElements.voiceToggleBtn.classList.add('active');
-      adminElements.voiceStatusText.textContent = '開啟';
     } else {
       adminElements.voiceToggleBtn.classList.remove('active');
-      adminElements.voiceStatusText.textContent = '靜音';
     }
   }
 
   if (adminElements.soundToggleBtn) {
     if (appState.settings.soundEnabled) {
       adminElements.soundToggleBtn.classList.add('active');
-      adminElements.soundStatusText.textContent = '開啟';
     } else {
       adminElements.soundToggleBtn.classList.remove('active');
-      adminElements.soundStatusText.textContent = '靜音';
     }
   }
 }
 
 function setupAdminEventListeners() {
-  // 叫號控制
-  adminElements.adminCallNextBtn.addEventListener('click', adminCallNext);
-  adminElements.adminCallPrevBtn.addEventListener('click', adminCallPrev);
-  adminElements.adminRepeatCallBtn.addEventListener('click', adminRepeatCall);
-  adminElements.adminIssueTicketBtn.addEventListener('click', adminIssueTicket);
-
   // 櫃檯切換
-  adminElements.adminCounterSelect.addEventListener('change', (e) => {
-    appState.settings.counter = e.target.value;
-    saveState('SETTINGS_UPDATED');
-    renderAdminUI();
-  });
-
-  // 頁籤切換 (等候中 / 已完成 / 即時日誌)
-  adminElements.tabBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      adminElements.tabBtns.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-
-      const tab = btn.dataset.tab;
-      adminElements.waitingListContainer.classList.add('hidden');
-      adminElements.completedListContainer.classList.add('hidden');
-      if (adminElements.logsListContainer) adminElements.logsListContainer.classList.add('hidden');
-
-      if (tab === 'waiting') {
-        adminElements.waitingListContainer.classList.remove('hidden');
-      } else if (tab === 'completed') {
-        adminElements.completedListContainer.classList.remove('hidden');
-      } else if (tab === 'logs') {
-        if (adminElements.logsListContainer) adminElements.logsListContainer.classList.remove('hidden');
-      }
+  if (adminElements.adminCounterSelect) {
+    adminElements.adminCounterSelect.addEventListener('change', (e) => {
+      appState.settings.counter = e.target.value;
+      saveState('SETTINGS_UPDATED');
+      renderAdminUI();
     });
-  });
+  }
 
-  // 音效與語音
-  adminElements.voiceToggleBtn.addEventListener('click', () => {
-    appState.settings.voiceEnabled = !appState.settings.voiceEnabled;
-    updateAudioControlsUI();
-    saveState('SETTINGS_UPDATED');
-  });
+  // ★ 3 大核心按鈕綁定 ★
+  // 1. 發號碼
+  if (adminElements.adminIssueTicketBtn) {
+    adminElements.adminIssueTicketBtn.addEventListener('click', adminIssueTicket);
+  }
 
-  adminElements.soundToggleBtn.addEventListener('click', () => {
-    appState.settings.soundEnabled = !appState.settings.soundEnabled;
-    updateAudioControlsUI();
-    saveState('SETTINGS_UPDATED');
-    if (appState.settings.soundEnabled) playDingDong();
-  });
+  // 2. 重新叫號
+  if (adminElements.adminRepeatCallBtn) {
+    adminElements.adminRepeatCallBtn.addEventListener('click', adminRepeatCall);
+  }
+
+  // 3. 這號好了 (自動跳下一號碼)
+  if (adminElements.adminCompleteAndNextBtn) {
+    adminElements.adminCompleteAndNextBtn.addEventListener('click', adminCompleteAndNext);
+  }
+
+  // 語音與音效開關
+  if (adminElements.voiceToggleBtn) {
+    adminElements.voiceToggleBtn.addEventListener('click', () => {
+      appState.settings.voiceEnabled = !appState.settings.voiceEnabled;
+      updateAudioControlsUI();
+      saveState('SETTINGS_UPDATED');
+    });
+  }
+
+  if (adminElements.soundToggleBtn) {
+    adminElements.soundToggleBtn.addEventListener('click', () => {
+      appState.settings.soundEnabled = !appState.settings.soundEnabled;
+      updateAudioControlsUI();
+      saveState('SETTINGS_UPDATED');
+      if (appState.settings.soundEnabled) playDingDong();
+    });
+  }
 
   // 顧客手機查號 QR Code 彈窗
   const showQrBtn = document.getElementById('showQrCodeBtn');
@@ -653,37 +488,20 @@ function setupAdminEventListeners() {
     });
   }
 
-  // 匯出 CSV 與 JSON
-  if (adminElements.exportCsvBtn) {
-    adminElements.exportCsvBtn.addEventListener('click', exportToCSV);
-  }
-  if (adminElements.exportJsonBtn) {
-    adminElements.exportJsonBtn.addEventListener('click', exportToJSON);
-  }
-  if (adminElements.importJsonBtn && adminElements.jsonFileInput) {
-    adminElements.importJsonBtn.addEventListener('click', () => {
-      adminElements.jsonFileInput.click();
-    });
-    adminElements.jsonFileInput.addEventListener('change', (e) => {
-      if (e.target.files && e.target.files[0]) {
-        importFromJSON(e.target.files[0]);
-        e.target.value = ''; // 重置 input
+  // 今日重置歸零
+  if (adminElements.resetAllBtn) {
+    adminElements.resetAllBtn.addEventListener('click', () => {
+      if (confirm('確定要清空今天所有號碼與排隊紀錄並歸零嗎？此動作將同步清除現場大螢幕！')) {
+        logActivity('系統歸零重置', '--', '--', '清空今日排隊資料');
+        appState.currentNumber = null;
+        appState.lastIssuedNumber = 0;
+        appState.waitingList = [];
+        appState.completedList = [];
+        saveState('RESET_ALL');
+        renderAdminUI();
       }
     });
   }
-
-  // 重置歸零
-  adminElements.resetAllBtn.addEventListener('click', () => {
-    if (confirm('確定要清空今天所有號碼與排隊紀錄並歸零嗎？此動作將同步清除現場大螢幕！建議清空前可先點「📥 匯出 CSV」留存紀錄。')) {
-      logActivity('系統歸零重置', '--', '--', '清空今日排隊資料');
-      appState.currentNumber = null;
-      appState.lastIssuedNumber = 0;
-      appState.waitingList = [];
-      appState.completedList = [];
-      saveState('RESET_ALL');
-      renderAdminUI();
-    }
-  });
 }
 
 window.addEventListener('DOMContentLoaded', initAdminView);

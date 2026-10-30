@@ -975,27 +975,78 @@ body {
   gap: 14px;
 }
 
+.simple-three-actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.action-btn.primary-issue {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 16px 12px;
+  cursor: pointer;
+  border-radius: 12px;
+  transition: all 0.25s ease;
+}
+
+.action-btn.primary-issue:hover {
+  background: linear-gradient(135deg, #1d4ed8, #1e40af);
+  box-shadow: 0 0 20px rgba(37, 99, 235, 0.5);
+  transform: translateY(-2px);
+}
+
+.action-btn.repeat {
+  background: linear-gradient(135deg, #d97706, #b45309);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 16px 12px;
+  cursor: pointer;
+  border-radius: 12px;
+  transition: all 0.25s ease;
+}
+
+.action-btn.repeat:hover {
+  background: linear-gradient(135deg, #b45309, #92400e);
+  box-shadow: 0 0 20px rgba(217, 119, 6, 0.5);
+  transform: translateY(-2px);
+}
+
 .action-btn.call-next-accent {
   background: linear-gradient(135deg, #10b981, #059669);
   color: #ffffff;
   font-weight: 800;
-  font-size: 1.1rem;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  padding: 16px 12px;
+  cursor: pointer;
+  border-radius: 12px;
+  transition: all 0.25s ease;
 }
 
 .action-btn.call-next-accent:hover {
   background: linear-gradient(135deg, #059669, #047857);
-  box-shadow: 0 0 20px rgba(16, 185, 129, 0.5);
+  box-shadow: 0 0 24px rgba(16, 185, 129, 0.6);
+  transform: translateY(-2px);
 }
 
-.action-btn.info-action {
-  background: rgba(37, 99, 235, 0.15);
-  border: 1px solid rgba(37, 99, 235, 0.4);
-  color: #93c5fd;
+.action-btn .btn-title {
+  display: block;
+  font-size: 1.25rem;
+  font-weight: 800;
+  margin-bottom: 2px;
 }
 
-.action-btn.info-action:hover {
-  background: rgba(37, 99, 235, 0.3);
-  color: #ffffff;
+.action-btn .btn-sub {
+  display: block;
+  font-size: 0.8rem;
+  opacity: 0.85;
+}
+
+@media (max-width: 768px) {
+  .simple-three-actions {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* 管理端等候卡片操作按鈕 */
